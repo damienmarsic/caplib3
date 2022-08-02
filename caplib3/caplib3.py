@@ -1,18 +1,16 @@
 #!/usr/bin/env python
-__version__='0.6.6'
-last_update='2022-08-01'
+__version__='0.6.7'
+last_update='2022-08-02'
 author='Damien Marsic, damien.marsic@aliyun.com'
 
-import argparse,sys,glob,gzip,os,time,math,regex
-from calendar import c
+import argparse,sys,gzip,math,regex
+from glob import glob
 import dmbiolib as dbl
 import numpy as np
-from Bio.Seq import Seq
 from collections import defaultdict
 from collections import Counter
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
-from Bio.Align.Applications import ClustalwCommandline
 
 ambiguous="ryswkmbdhvn"
 aa="ARNDCQEGHILKMFPSTWYV"
@@ -28,18 +26,6 @@ def override(func):
             func()
             parser.exit()
     return OverrideAction
-
-def check_file(filename,strict):
-    try:
-        f=open(filename,'r')
-    except IOError:
-        if strict:
-            print("\n  File "+filename+" could not be found!\n")
-            sys.exit()
-        else:
-            return False
-    else:
-        return True
 
 def check_seq(filename,type,required,strict,limit):
     if filename[-3:]=='.gz':
@@ -107,29 +93,6 @@ def readseq(filename):
     f.close()
     return seq
 
-def readmultifasta(filename):
-    f=open(filename,'r')
-    temp=f.read().strip()
-    f.close()
-    seq={}
-    if not '>' in temp:
-        print('\n  '+filename+' is not a fasta file!\n\n')
-        sys.exit()
-    while temp[0]!='>':
-        temp=temp[1:]
-    temp=temp.split('>')
-    for n in temp:
-        x=n[:n.find('\n')]
-        x=x[:max(len(x),x.find(' '))]
-        y=n[n.find('\n'):]
-        if x in seq:
-            print('\n  Duplicate name '+x+' found in parental sequences! All sequences must have a different name!\n\n')
-            sys.exit()
-        y=y.replace(' ','').replace('\n','').lower()
-        if x:
-            seq[x]=y
-    return seq
-
 def readinit(prog):
     lt='undefined'
     pp=''
@@ -138,7 +101,7 @@ def readinit(prog):
     vrlist=[]
     links=[]
     B=''
-    if check_file('caplib3.conf',False):
+    if dbl.check_file('caplib3.conf',False):
         with open('caplib3.conf','r') as f:
             for line in f:
                 if line[:14]=='# Library type':
@@ -263,13 +226,13 @@ def findvr(l,vrs,vrdic,vrcnt):
                 if len(A)>1:
                     A=[(x,y) for (x,y) in A if (y-x)%3==0]
                 if len(A)>1:
-                    A=[(x,y) for (x,y) in A if match(l[x:y],vr)]
+                    A=[(x,y) for (x,y) in A if dbl.match(l[x:y],vr)]
                 if len(A)==1:
                     x,y=A[0][0],A[0][1]
                     c=l[x:y]
                     a=y
                     if c and len(c)%3==0:
-                        z=str(Seq(c).translate())
+                        z=dbl.transl(c)
                     else:
                         z=''
                     if len(c)%3!=0:
@@ -278,7 +241,7 @@ def findvr(l,vrs,vrdic,vrcnt):
                     elif '*' in z:
                         d=2
                         vrcnt[i][2]+=1
-                    elif match(c,vr):
+                    elif dbl.match(c,vr):
                         d=4
                         vrcnt[i][4]+=1
                     else:
@@ -294,23 +257,6 @@ def findvr(l,vrs,vrdic,vrcnt):
             z=''
         m.append((c,z,d))
     return m,vrcnt
-
-def nt_match(nt1, nt2):
-    if nt1==nt2:
-        return True
-    elif (nt2 in ambiguous and nt1 in IUPAC[ambiguous.index(nt2)]) or (nt1 in ambiguous and nt2 in IUPAC[ambiguous.index(nt1)]):
-        return True
-    else:
-        return False
-
-def match(text1, text2):
-    if len(text1)==len(text2):
-        for l in range(len(text1)):
-            if not nt_match(text1[l], text2[l]):
-                return False
-        return True
-    else:
-        return False
 
 def aa_dist(aaseq,size,vrs,number,vrdic,fname):
     for n in vrdic.values():
@@ -367,31 +313,8 @@ def aa_dist(aaseq,size,vrs,number,vrdic,fname):
             g.write(str(m)+','+str((1-mutdist[m]/total[x])*100)+'\n')
         g.close()
 
-def pr2(f,t):
-    print(t)
-    f.write(t+'\n')
-
-def compress(seq):
-    x=''
-    for n in seq:
-        if x and n==x[-1]:
-            continue
-        x+=n
-    return x
-
-def diff(seqs):
-    z=len(seqs[0])
-    x=[(seqs[i],seqs[j]) for i in range(len(seqs)) for j in range(i+1, len(seqs))]
-    for (a,b) in x:
-        y=0
-        for i in range(len(a)):
-            if a[i]!=b[i]:
-                y+=1
-        z=min(z,y)
-    return z
-
 def seqdel(seq,probe,end):
-    seq2=compress(seq[:len(probe)*3+end])
+    seq2=dbl.compress(seq[:len(probe)*3+end])
     seq2=seq2[:len(probe)]
     if seq2==probe:
         i=0
@@ -483,17 +406,17 @@ def Fseq(x,y,z,sd,fp,rp,ais,s1,s2):
             if T:
                 for i in (0,1):
                     c=[k for k,v in (fp,rp)[i].items() if v==p[i]][0]
-                    cp=compress(primers[p[i]]).replace(compress(c),'')
+                    cp=dbl.compress(primers[p[i]]).replace(dbl.compress(c),'')
                     if len(cp)<5:
-                        cp=compress(primers[p[i]])
+                        cp=dbl.compress(primers[p[i]])
                     j=len(primers[p[i]])*2
                     if i==0:
                         s1=seq
                     else:
-                        s1=str(Seq(seq).reverse_complement())
-                    if cp in compress(s1[:j]):
+                        s1=dbl.revcomp(seq)
+                    if cp in dbl.compress(s1[:j]):
                         while True:
-                            if cp not in compress(s1[:j]):
+                            if cp not in dbl.compress(s1[:j]):
                                 break
                             j-=1
                         b=j+1
@@ -521,26 +444,6 @@ def Fseq(x,y,z,sd,fp,rp,ais,s1,s2):
         else:
             rcount[2]+=1
     return F,seq
-
-def complexity(seq):
-    i=0
-    t=[]
-    while i+3<=len(seq):
-        t.append(defaultdict(int))
-        x=seq[i:i+3]
-        i+=3
-        c=[[],[],[]]
-        for n in range(3):
-            if x[n] in ambiguous:
-                for m in IUPAC[ambiguous.index(x[n])]:
-                    c[n].append(m)
-            else:
-                c[n].append(x[n])
-        for n1 in c[0]:
-            for n2 in c[1]:
-                for n3 in c[2]:
-                    t[-1][dbl.gcode[n1+n2+n3]]+=1
-    return t
 
 def wcomp1(x,y,f):
     if len(x)==0 or len(y)==0:
@@ -621,7 +524,7 @@ def wcomp1(x,y,f):
 
 def get_filtered(x):
     b={}
-    cr=glob.glob('*clean_report.txt')
+    cr=glob('*clean_report.txt')
     for crf in cr:
         vr=''
         i=-1
@@ -713,22 +616,6 @@ def enrichment(data1,data2,data3,title1,title2,label,yticklabel,f):
         f.savefig()
     plt.close()
 
-def rename(name):
-    if glob.glob(name):
-        t=str(time.time())
-        n=name[:name.rfind('.')]+'-'+t[:t.find('.')]+name[name.rfind('.'):]
-        os.rename(name,n)
-        print('\n  Existing '+name+' file was renamed as '+n+'\n  Creating new '+name+' file...\n')
-
-def lncount(f):
-    def _make_gen(reader):
-        b=reader(1024*1024)
-        while b:
-            yield b
-            b=reader(1024*1024)
-    f_gen=_make_gen(f.read)
-    return sum(buf.count(b'\n') for buf in f_gen)
-
 def main():
     parser=argparse.ArgumentParser(description="NGS analysis of protein combinatorial libraries. For full documentation, visit: https://caplib3.readthedocs.io")
     parser.add_argument('-v','--version',nargs=0,action=override(version),help="Display version")
@@ -811,14 +698,14 @@ def aa2nt(args):
         sys.exit()
     fail=''
     print('\n  Checking list file... ',end='')
-    x=glob.glob(args.list+'*')
+    x=glob(args.list+'*')
     if not x:
         fail+='\n  List file not found!'
     if len(x)>1:
         if args.list[:6]=='select':
-            x=glob.glob(args.list+'*'+'sequences.txt')
+            x=glob(args.list+'*'+'sequences.txt')
         else:
-            x=glob.glob(args.list+'*'+'selected_sequences.txt')
+            x=glob(args.list+'*'+'selected_sequences.txt')
     if len(x)>1:
         fail+='\n  More than one file found! Make the list argument less ambiguous !'
     if args.min_freq<0 or args.min_freq>100:
@@ -838,11 +725,11 @@ def aa2nt(args):
             print('\n'+fail+'\n')
             sys.exit()
     if wt:
-        x=glob.glob(wt+'*')
+        x=glob(wt+'*')
         if len(x)>1:
             x=[k for k in x if not dbl.getfasta(k,dbl.aa,dbl.aa,False)[1] and dbl.getfasta(k,'atgc','atgc',False)[1]]
         if len(x)!=1 and args.wildtype:
-            x=glob.glob(args.wildtype+'*')
+            x=glob(args.wildtype+'*')
             if len(x)>1:
                 x=[k for k in x if not dbl.getfasta(k,dbl.aa,dbl.aa,False)[1] and dbl.getfasta(k,'atgc','atgc',False)[1]]
         if len(x)==1:
@@ -857,15 +744,15 @@ def aa2nt(args):
     seqs=defaultdict(int)
     if '.fa' in x or '.fq' in x:
         z=z[:z.find('.f')]
-    x=glob.glob(z+'*')
+    x=glob(z+'*')
     if not x:
         fail+='\n  Read file not found!'
     if len(x)>1:
-        y=glob.glob(z+'*.cl3')
+        y=glob(z+'*.cl3')
         if len(y)==1:
             cl3=y[0]
         else:
-            x=glob.glob(z+'*.f*')
+            x=glob(z+'*.f*')
     if len(x)>1 and not cl3:
         fail+='\n  More than one file found! Make the reads argument less ambiguous !'
     if len(x)==1:
@@ -1068,8 +955,8 @@ def demux(args):
     global mcount,rcount,T,primers
     if args.new:
         rename('caplib3_demux.txt')
-    dfile=glob.glob(args.demux_file)
-    if args.new or (len(dfile)==0 and len(glob.glob('*demux.txt'))==0):
+    dfile=glob(args.demux_file)
+    if args.new or (len(dfile)==0 and len(glob('*demux.txt'))==0):
         with open('caplib3_demux.txt','w') as f:
             f.write('# Forward primers, 1 per line: name and sequence (separated by space or tab)\n\n')
             f.write('# Reverse primers, 1 per line: name and sequence (separated by space or tab)\n\n')
@@ -1222,11 +1109,11 @@ def demux(args):
         else:
             k=-i+1
         for m in n:
-            if len(compress(m[:k]))!=len(m[:k]):
+            if len(dbl.compress(m[:k]))!=len(m[:k]):
                 cmode=False
                 break
-    if diff([n[:b] for n in fp])>2 and diff([n[:b] for n in rp])>2:
-        while diff([n[:b] for n in list(fp.keys())+list(rp.keys())])<=2:
+    if dbl.diff([n[:b] for n in fp])>2 and dbl.diff([n[:b] for n in rp])>2:
+        while dbl.diff([n[:b] for n in list(fp.keys())+list(rp.keys())])<=2:
             b+=1
             if b==len(a):
                 break
@@ -1236,7 +1123,7 @@ def demux(args):
     for n in (fp,rp):
         for m in list(n.keys()).copy():
             if cmode:
-                y=compress(m)
+                y=dbl.compress(m)
                 if y[:min(len(y),b)]!=m:
                     n[y[:min(len(y),b)]]=n[m]
                     del n[m]
@@ -1245,19 +1132,19 @@ def demux(args):
                     n[m[:b]]=n[m]
                     del n[m]
     x=list(fp.keys())+list(rp.keys())
-    if diff(x)>2:
+    if dbl.diff(x)>2:
         ec=True
     else:
         ec=False
         print('\n  Warning! Poor quality barcodes. Error correction can not be used because barcodes are not different enough from each other.')
     if args.read_file!='auto':
-        rfile=glob.glob(args.read_file)
+        rfile=glob(args.read_file)
     else:
-        rfile=glob.glob('*f*q.gz')
+        rfile=glob('*f*q.gz')
         if not rfile:
-            rfile=glob.glob('*.fastq')
+            rfile=glob('*.fastq')
         if not rfile:
-            rfile=glob.glob('*.fasta')
+            rfile=glob('*.fasta')
     if not rfile:
         print("\n  No read file found. Check pattern, or move to correct directory, or include path in pattern.\n\n")
         sys.exit()
@@ -1299,7 +1186,7 @@ def demux(args):
         if x:
             n=adseq[x]/cnt*100
             L=len(x)*2
-            cx=compress(x)
+            cx=dbl.compress(x)
             counter=0
             count=0
             f.seek(0)
@@ -1311,7 +1198,7 @@ def demux(args):
                 counter-=1
                 if len(l)<L:
                     continue
-                l=compress(l.lower()[:L])
+                l=dbl.compress(l.lower()[:L])
                 l=l[:len(cx)]
                 counter+=1
                 if cx==l or cx[1:]==l[:-1] or cx[2:]==l[:-2]:
@@ -1369,16 +1256,16 @@ def demux(args):
         l=l.lower()
         if aprobe:
             l=seqdel(l,aprobe,pend)
-            lrc=str(Seq(l).reverse_complement())
+            lrc=dbl.revcomp(l)
             lrc=seqdel(lrc,aprobe,pend)
-            l=str(Seq(lrc).reverse_complement())
+            l=dbl.revcomp(lrc)
         else:
-            lrc=str(Seq(l).reverse_complement())
+            lrc=dbl.revcomp(l)
         z=0
         rcount[0]+=1
         if cmode:
-            m=compress(l[:min(L,len(l))])
-            mrc=compress(lrc[:min(L,len(lrc))])
+            m=dbl.compress(l[:min(L,len(l))])
+            mrc=dbl.compress(lrc[:min(L,len(lrc))])
         else:
             m=l[:min(L,len(l))]
             mrc=lrc[:min(L,len(lrc))]
@@ -1568,7 +1455,7 @@ def init(args):
             par_aa=readseq(par_aa_file).upper()
             frame=vrlist[0][1]%3
             print()
-        t=complexity(lib_nt[frame:])
+        t=dbl.complexity(lib_nt[frame:])
         fname=lib_file[:lib_file.rfind('.')]
         if fname[-2:]=='nt' and fname[-3] in ('-','_','.'):
             fname=fname[:-3]
@@ -1648,15 +1535,15 @@ def init(args):
     if not args.lib_file:
         print('\n  Argument --lib_file (-l) is required for defined libraries, and argument --parent (-p) is required for undefined libraries!\n')
         sys.exit()
-    check_file(args.lib_file,True)
+    dbl.check_file(args.lib_file,True)
     check_seq(args.lib_file,'atgc'+ambiguous,ambiguous,True,0)
     if args.parent:
-        check_file(args.parent,True)
+        dbl.check_file(args.parent,True)
         check_seq(args.parent,'atgc','atgc',True,0)
         par_nt=readseq(args.parent)
         temp=[]
         for frame in range(3):
-            temp.append(str(Seq(par_nt[frame:3*(len(par_nt[frame:])//3)+frame]).translate()).strip().upper())
+            temp.append(dbl.transl(par_nt[frame:3*(len(par_nt[frame:])//3)+frame]).strip().upper())
         if not '*' in temp[0][:-1]:
             par_aa=temp[0]
         elif not '*' in temp[1][:-1] and '*' in temp[2][:-1]:
@@ -1677,7 +1564,7 @@ def init(args):
         b=a+1
     temp=[]
     for frame in range(a,b):
-        lib_aa=str(Seq(lib_nt[frame:3*(len(lib_nt[frame:])//3)+frame]).translate()).strip()
+        lib_aa=dbl.transl(lib_nt[frame:3*(len(lib_nt[frame:])//3)+frame]).strip()
         if '*' in lib_aa[:-1] and a!=b-1:
             continue
         if not args.parent:
@@ -1725,7 +1612,7 @@ def init(args):
         f.write('>'+temp1[:-6]+'\n'+lib_aa+'\n')
     print('\n  Library protein sequence was saved as '+temp1)
     vrl2=''
-    if check_file('caplib3.conf',False):
+    if dbl.check_file('caplib3.conf',False):
         vrl2=[k[0] for k in readinit('link')]
     rename('caplib3.conf')
     ifile=open('caplib3.conf','w')
@@ -1946,7 +1833,7 @@ def link(args):
                 z+=1
             if not l:
                 break
-            lrc=str(Seq(l).reverse_complement())
+            lrc=dbl.revcomp(l)
             z=0
             count+=1
             temp0=detect(l,vrlist,temp0)
@@ -2075,10 +1962,10 @@ def extract():
             if x[2]==0:
                 m,vrcnt=findvr(l,x[3],vrdic,vrcnt)
             elif x[2]==1:
-                m,vrcnt=findvr(str(Seq(l).reverse_complement()),x[3],vrdic,vrcnt)
+                m,vrcnt=findvr(dbl.revcomp(l),x[3],vrdic,vrcnt)
             else:
                 m0=findvr(l,x[3],vrdic,vrcnt)
-                m1=findvr(str(Seq(l).reverse_complement()),x[3],vrdic,vrcnt)
+                m1=findvr(dbl.revcomp(l),x[3],vrdic,vrcnt)
                 if sum(i for (_,_,i) in m0[0])>sum(i for (_,_,i) in m1[0]):
                     m,vrcnt=m0[0],m0[1]
                 elif sum(i for (_,_,i) in m0[0])<sum(i for (_,_,i) in m1[0]):
@@ -2245,7 +2132,7 @@ def clean(args):
         x='*_extracted.txt'
     else:
         x=args.input_files+'*'
-    files=glob.glob(x)
+    files=glob(x)
     files=[x for x in files if ('extracted' in x and '.csv' not in x and 'report' not in x)]
     if not files:
         print("\n  Files not found. Check pattern, or move to correct directory, or include path in pattern.\n")
@@ -2260,9 +2147,9 @@ def clean(args):
             x='*aa.f*a'
         else:
             x=args.parents
-        par=glob.glob(x)
+        par=glob(x)
         if not par:
-            par=glob.glob(x[:x.rfind('.')+1]+'*')
+            par=glob(x[:x.rfind('.')+1]+'*')
         if not par and args.parents!='auto':
             print('\n  Parental sequence file was not found!\n')
             sys.exit()
@@ -2274,9 +2161,7 @@ def clean(args):
             sys.exit()
         par=par[0]
     if par:
-        par=readmultifasta(par)
-        for n in par:
-            par[n]=par[n].upper()
+        par=dbl.getfasta(par,dbl.aa,dbl.aa,True)
     length=args.length.replace(' ','').split(',')
     bad=False
     if len(length)!=4:
@@ -2362,7 +2247,7 @@ def clean(args):
         if total.isdigit():
             total=int(total)
         else:
-            pr2(r,'\n  File '+fname+' is not a valid input file !\n')
+            dbl.pr2(r,'\n  File '+fname+' is not a valid input file !\n')
             continue
         x=f.readline().strip()
         defined=False
@@ -2376,7 +2261,7 @@ def clean(args):
             while len(vrs)<x.count(',')+1:
                 a=fname[:b].replace('_','-').rfind('-')
                 if a==-1:
-                    pr2(r,'\n  Ignoring file: '+fname+'\n  Reason: could not find variable region names within file name!')
+                    dbl.pr2(r,'\n  Ignoring file: '+fname+'\n  Reason: could not find variable region names within file name!')
                     break
                 n=fname[a+1:b]
                 if n in vrdic:
@@ -2388,14 +2273,14 @@ def clean(args):
             for vr in vrs:
                 sdf.append([])
                 x=fn+'_'+vr+'_extracted_sd.csv'
-                if not check_file(x,False):
-                    pr2(r,'\n  Warning: could not find size distribution file for variable region: '+vr+' of '+fn+'\n  Filtering will be affected!\n')
+                if not dbl.check_file(x,False):
+                    dbl.pr2(r,'\n  Warning: could not find size distribution file for variable region: '+vr+' of '+fn+'\n  Filtering will be affected!\n')
                     continue
                 sdf=sizefilter(x,sdf,length)
             adf=defaultdict(list)
             x=fn+'_extracted_aad.csv'
-            if not check_file(x,False):
-                pr2(r,'\n  Warning: could not find amino acid distribution file for file: '+fname+'\n  Filtering will be affected!\n')
+            if not dbl.check_file(x,False):
+                dbl.pr2(r,'\n  Warning: could not find amino acid distribution file for file: '+fname+'\n  Filtering will be affected!\n')
             else:
                 s=open(x,'r')
                 a=s.readline().strip().split(',')[1:]
@@ -2416,7 +2301,7 @@ def clean(args):
         ftotal=0
         f.seek(0)
         f.readline()
-        pr2(r,'\n  Processing file: '+fname+'\n  Number of sequences: '+str(total))
+        dbl.pr2(r,'\n  Processing file: '+fname+'\n  Number of sequences: '+str(total))
         sd=defaultdict(int)
         if defined:
             matched=0
@@ -2533,10 +2418,10 @@ def clean(args):
             x=' including '+str(matched)+' sequences perfectly matching the library'
         else:
             vrs='a'
-        pr2(r,'  Discarded sequences: '+str(total-ftotal)+'\n  Filtered sequences: '+str(ftotal)+x)
-        pr2(r,'  Complexity: '+str(len(filtered))+'\n  Filtered sequences were saved into file: '+clf)
+        dbl.pr2(r,'  Discarded sequences: '+str(total-ftotal)+'\n  Filtered sequences: '+str(ftotal)+x)
+        dbl.pr2(r,'  Complexity: '+str(len(filtered))+'\n  Filtered sequences were saved into file: '+clf)
         if not defined:
-            pr2(r,'  '+str(len(seqs))+' full sequences were saved into file: '+slf)
+            dbl.pr2(r,'  '+str(len(seqs))+' full sequences were saved into file: '+slf)
         if len(vrs)==1:
             x=clf.replace('.txt','_sd.csv')
             f=open(x,'w')
@@ -2547,13 +2432,13 @@ def clean(args):
             for i in sorted(sd):
                 f.write(','+str(sd[i]))
             f.close()
-            pr2(r,'  Size distribution was saved into file: '+x)
+            dbl.pr2(r,'  Size distribution was saved into file: '+x)
             x=', '
             if defined:
                 x=' aa (expected: '+str(len(vrdic[vrs[0]][2])//3)+' aa), '
-            pr2(r,'  Most common size: '+str(max(sd,key=sd.get))+x+f'{(max(sd.values())/ftotal*100):.2f}'+'% of sequences')
+            dbl.pr2(r,'  Most common size: '+str(max(sd,key=sd.get))+x+f'{(max(sd.values())/ftotal*100):.2f}'+'% of sequences')
         x=int(filtered[0].split('\t')[1])/ftotal*100
-        pr2(r,'  Most common sequence: '+filtered[0].split('\t')[0]+', '+f'{(x):.2f}'+'% of sequences')
+        dbl.pr2(r,'  Most common sequence: '+filtered[0].split('\t')[0]+', '+f'{(x):.2f}'+'% of sequences')
         if defined and len(vrlist[0])==6:
             M=[]
             for n in vrs:
@@ -2564,14 +2449,14 @@ def clean(args):
             else:
                 M=','.join(M)
             if M==filtered[0].split('\t')[0]:
-                pr2(r,'  Most common sequence is parent sequence')
+                dbl.pr2(r,'  Most common sequence is parent sequence')
             else:
                 x=0
                 for n in filtered:
                     if M==n.split('\t')[0]:
                         x=int(n.split('\t')[1])/ftotal*100
                         break
-                pr2(r,'  Parent sequence: '+M+', '+f'{(x):.2f}'+'% of sequences')
+                dbl.pr2(r,'  Parent sequence: '+M+', '+f'{(x):.2f}'+'% of sequences')
         q=Counter([int(x.split('\t')[1]) for x in filtered])
         x=clf.replace('.txt','_cnd.csv')
         f=open(x,'w')
@@ -2579,7 +2464,7 @@ def clean(args):
         for n in sorted(q):
             f.write(str(n)+","+str(q[n])+"\n")
         f.close()
-        pr2(r,"  Copy number distribution was saved into file: "+x)
+        dbl.pr2(r,"  Copy number distribution was saved into file: "+x)
         if not defined or len(vrlist[0])==6:
             nummut=defaultdict(int)
             if not defined:
@@ -2610,8 +2495,8 @@ def clean(args):
                 f.write(str(k)+","+str(nummut[k])+"\n")
                 n+=k*nummut[k]
             f.close()
-            pr2(r,"  Average number of mutations per sequence: "+f'{(n/ftotal):.2f}')
-            pr2(r,"  Mutation number distribution was saved into file: "+x)
+            dbl.pr2(r,"  Average number of mutations per sequence: "+f'{(n/ftotal):.2f}')
+            dbl.pr2(r,"  Mutation number distribution was saved into file: "+x)
             if not defined:
                 x=clf.replace('.txt','_npsd.csv')
                 f=open(x,'w')
@@ -2621,8 +2506,8 @@ def clean(args):
                     f.write(str(k)+","+str(numseg[k])+"\n")
                     n+=k*numseg[k]
                 f.close()
-                pr2(r,"  Average number of non-parental segments per sequence: "+f'{(n/ftotal):.2f}')
-                pr2(r,"  Non-parental segment distribution was saved into file: "+x)
+                dbl.pr2(r,"  Average number of non-parental segments per sequence: "+f'{(n/ftotal):.2f}')
+                dbl.pr2(r,"  Non-parental segment distribution was saved into file: "+x)
     if defined:
         for x in links:
             for y in files:
@@ -2631,10 +2516,10 @@ def clean(args):
             else:
                 continue
             for y in x[3]:
-                if not check_file(x[1]+'_'+y+'_cleaned.txt',False):
+                if not dbl.check_file(x[1]+'_'+y+'_cleaned.txt',False):
                     break
             else:
-                pr2(r,'\n  Analyzing variations for all variables positions in '+x[1])
+                dbl.pr2(r,'\n  Analyzing variations for all variables positions in '+x[1])
                 es=[]
                 aaseq=[]
                 for vr in x[3]:
@@ -2652,11 +2537,11 @@ def clean(args):
                         aaseq[-1][m[0]][0]+=int(m[1])
                     f.close()
                 aa_dist(aaseq,es,x[3],number,vrdic,x[1]+'_cleaned_aad.csv')
-                pr2(r,'  Amino acid distribution of cleaned protein sequences of expected size was saved into file: '+x[1]+'_cleaned_aad.csv')
+                dbl.pr2(r,'  Amino acid distribution of cleaned protein sequences of expected size was saved into file: '+x[1]+'_cleaned_aad.csv')
                 if len(vrlist[0])==6:
-                    pr2(r,'  Mutation distribution of cleaned protein sequences of expected size was saved into file: '+x[1]+'_cleaned_md.csv')
+                    dbl.pr2(r,'  Mutation distribution of cleaned protein sequences of expected size was saved into file: '+x[1]+'_cleaned_md.csv')
                 continue
-            pr2(r,'\n  Amino acid distribution file for '+x[1]+' can not be created because some cleaned files are missing!')
+            dbl.pr2(r,'\n  Amino acid distribution file for '+x[1]+' can not be created because some cleaned files are missing!')
     r.close()
     print('\n  Cleaning report was saved in file: '+report+'\n')
 
@@ -2690,9 +2575,9 @@ def extract2(args):
     if not args.parents:
         print('\n  Argument -p (--parents) is required!\n\n')
         sys.exit()
-    par=glob.glob(args.parents+'*')
+    par=glob(args.parents+'*')
     if len(par)>1:
-        par=glob.glob(args.parents+'.*')
+        par=glob(args.parents+'.*')
     if not len(par):
         print('\n  Parent file could not be found!\n\n')
         sys.exit()
@@ -2716,13 +2601,13 @@ def extract2(args):
     grain=args.crude_extract
 # Detect reading frames and generate protein sequences
     print('                 OK\n\n  Processing parental sequences...',end='')
-    par=readmultifasta(par)
+    par=dbl.getfasta(par,'atgc','atgc',True)
     par_aa={}
     save_par=False
     for n in sorted(par):
         temp=[]
         for i in (0,1,2):
-            temp.append(str(Seq(par[n][i:3*(len(par[n][i:])//3)+i]).translate()).strip().upper())
+            temp.append(dbl.transl(par[n][i:3*(len(par[n][i:])//3)+i]).strip().upper())
             temp[-1]=(temp[-1],temp[-1].find('*'))
         x=[k for k in temp if k[1]==-1]
         y=max([k[1] for k in temp])
@@ -2767,7 +2652,7 @@ def extract2(args):
     f.write('\n')
     f.close()
     print('      OK\n')
-    pr2(r,'  Parental protein sequences were saved into file: '+fname+'\n')
+    dbl.pr2(r,'  Parental protein sequences were saved into file: '+fname+'\n')
 # Map primers to parents
     fpn=0
     rpn=0
@@ -2775,7 +2660,7 @@ def extract2(args):
     rpa=False
     score=defaultdict(int)
     if rp:
-        rprc=str(Seq(rp).reverse_complement())
+        rprc=dbl.revcomp(rp)
     for n in par:
         if fp and fp in par[n]:
             score[n]+=1
@@ -2793,7 +2678,7 @@ def extract2(args):
                 x=len(par[n])
     if fp:
         fp2=fp[2:]
-        cfp=compress(fp2)
+        cfp=dbl.compress(fp2)
         x=fp.find('atg')
         y=ref.find(fp)
         if ref[:3]=='atg':
@@ -2821,7 +2706,7 @@ def extract2(args):
                 i+=1
             rpn=len(rprc[:-i])
         rp2=rprc[:-2]
-        crp=compress(rp2)
+        crp=dbl.compress(rp2)
         if len([k for k in rp2 if k in ambiguous])>0:
             rpa=True
 # Start processing read files
@@ -2852,7 +2737,7 @@ def extract2(args):
             total+=1
 # Detect correct strand
             if args.detect_strand:
-                lrc=str(Seq(l).reverse_complement())
+                lrc=dbl.revcomp(l)
                 d=False
                 a=l[:len(l)//2]
                 b=lrc[:len(lrc)//2]
@@ -2890,7 +2775,7 @@ def extract2(args):
                     l=l[len(fp)-fpn:]
                 elif fpa:
                     for i in range(len(fp)):
-                        if match(fp2,l[i:i+len(fp2)]):
+                        if dbl.match(fp2,l[i:i+len(fp2)]):
                             l=fp[:2]+l[i:]
                             l=l[len(fp)-fpn:]
                             break
@@ -2923,7 +2808,7 @@ def extract2(args):
                     l=l[:l.rfind(rp2)]+rprc[:rpn]
                 elif rpa:
                     for i in range(len(rprc)):
-                        if match(rp2,l[-i-len(rp2):-i]):
+                        if dbl.match(rp2,l[-i-len(rp2):-i]):
                             l=l[:-i-len(rp2)]+rprc[:rpn]
                             break
                 else:
@@ -3270,7 +3155,7 @@ def extract2(args):
 # Process 3' end
             a=par[seq[-1][1]][comp[-1][4]-x:comp[-1][4]]+l[comp[-1][1]:]
             a=a[:(len(a)//3)*3]
-            a=str(Seq(a).translate())
+            a=dbl.transl(a)
             if '*' in a:
                 a=a[:a.find('*')]
             if a:
@@ -3439,14 +3324,14 @@ def extract2(args):
         e=str(noextract[1])
         f=str(noextract[2])
         print('\b\b\b\b\b\b100.0%\n\n')
-        pr2(r,'  Read file: '+rfile)
-        pr2(r,'  Reads processed: '+str(total))
-        pr2(r,'  Reads discarded: '+' '*(a-len(b))+b+' ('+str(round((nodetect+sum(noextract))/total*100,2))+'%) including:\n'+' '*(19+a-len(c))+c+' unmatched\n'+' '*(19+a-len(d))+d+' frameshifted reads\n'+' '*(19+a-len(e))+e+' reads with ambiguous nucleotides\n'+' '*(19+a-len(f))+f+' reads with stop codons')
+        dbl.pr2(r,'  Read file: '+rfile)
+        dbl.pr2(r,'  Reads processed: '+str(total))
+        dbl.pr2(r,'  Reads discarded: '+' '*(a-len(b))+b+' ('+str(round((nodetect+sum(noextract))/total*100,2))+'%) including:\n'+' '*(19+a-len(c))+c+' unmatched\n'+' '*(19+a-len(d))+d+' frameshifted reads\n'+' '*(19+a-len(e))+e+' reads with ambiguous nucleotides\n'+' '*(19+a-len(f))+f+' reads with stop codons')
         b=str(corrected)
         c=str(correct[0])
         d=str(correct[1])
         e=str(correct[2])
-        pr2(r,'  Reads extracted: '+' '*(a-len(str(extracted)))+str(extracted)+' ('+str(round((extracted)/total*100,2))+'%) including:\n'+' '*(19+a-len(b))+b+' total corrected reads\n'+' '*(19+a-len(c))+c+' reads with corrected frameshift\n'+' '*(19+a-len(d))+d+' reads with corrected ambiguous nucleotide\n'+' '*(19+a-len(e))+e+' reads with corrected stop codon\n')
+        dbl.pr2(r,'  Reads extracted: '+' '*(a-len(str(extracted)))+str(extracted)+' ('+str(round((extracted)/total*100,2))+'%) including:\n'+' '*(19+a-len(b))+b+' total corrected reads\n'+' '*(19+a-len(c))+c+' reads with corrected frameshift\n'+' '*(19+a-len(d))+d+' reads with corrected ambiguous nucleotide\n'+' '*(19+a-len(e))+e+' reads with corrected stop codon\n')
         fname=rfile[:rfile.find('.')]
         if not '.' in rfile:
             fname=rfile
@@ -3475,7 +3360,7 @@ def extract2(args):
             npp[sum([len(k[1]) for k in n[0] if len(k)==2])]+=n[1]
             nps[len([k for k in n[0] if len(k)==2])]+=n[1]
         f.close()
-        pr2(r,'  Extracted sequences were saved into file: '+fname)
+        dbl.pr2(r,'  Extracted sequences were saved into file: '+fname)
         fname=fname.replace('.txt','_sd.csv')
         f=open(fname,'w')
         f.write('Size (aa)')
@@ -3486,7 +3371,7 @@ def extract2(args):
             f.write(','+str(sd[i]))
         f.write('\n')
         f.close()
-        pr2(r,'  Size distribution was saved into file: '+fname)
+        dbl.pr2(r,'  Size distribution was saved into file: '+fname)
         if not grain:
             fname=fname.replace('_sd.','_mnd.')
             f=open(fname,'w')
@@ -3494,14 +3379,14 @@ def extract2(args):
             for i in sorted(npp):
                 f.write(str(i)+','+str(npp[i])+'\n')
             f.close()
-            pr2(r,'  Distribution of numbers of non-parental positions was saved into file: '+fname)
+            dbl.pr2(r,'  Distribution of numbers of non-parental positions was saved into file: '+fname)
             fname=fname.replace('_mnd.','_npsd.')
             f=open(fname,'w')
             f.write('Number of non-parental segments,Number of reads\n')
             for i in sorted(nps):
                 f.write(str(i)+','+str(nps[i])+'\n')
             f.close()
-            pr2(r,'  Distribution of numbers of non-parental segments was saved into file: '+fname+'\n')
+            dbl.pr2(r,'  Distribution of numbers of non-parental segments was saved into file: '+fname+'\n')
     r.close()
 
 
@@ -3577,7 +3462,7 @@ def process(a1,a2,i):
     if seq:
         c=seq[-1][0]+seq[-1][3]-seq[-1][2]
     if z>0:
-        w=str(Seq(a[:z]+b[min(0,p-z+len(a[:z])):]).translate())
+        w=dbl.transl(a[:z]+b[min(0,p-z+len(a[:z])):])
         if 'X' in w:
             noextract[1]+=1
             return (False,0)
@@ -3640,11 +3525,11 @@ def getread(f,y,z,counter):
 def findreadfiles(pattern,seqtype,exclude):
     if pattern=='auto':
         x='*.f*'
-    elif check_file(pattern,False):
+    elif dbl.check_file(pattern,False):
         x=pattern
     else:
         x=pattern+'*'
-    rfiles=glob.glob(x)
+    rfiles=glob(x)
     if len(rfiles)>1:
         rfiles=[x for x in rfiles if (len(x)>5 and x[-5:] in ('fasta','fastq','fa.gz','fq.gz')) or (len(x)>3 and x[-3:] in ('.fa','.fq')) or (len(x)>8 and x[-8:] in ('fasta.gz','fastq.gz'))]
     rfiles=[x for x in rfiles if check_seq(x,seqtype[0],seqtype[1],False,5)]
@@ -3663,7 +3548,7 @@ def findreadfiles(pattern,seqtype,exclude):
         else:
             f=open(rfile,'r')
         if rfile[-3:]=='.gz' or rfile[-1]=='q':
-            nr=lncount(f)//4
+            nr=dbl.lncount(f)//4
         else:
             nr=f.read().count('>')
         f.close()
@@ -3677,7 +3562,7 @@ def findreadfiles(pattern,seqtype,exclude):
 def mix(args):
     if args.new:
         rename('caplib3_mix.txt')
-    if glob.glob('caplib3_mix.txt'):
+    if glob('caplib3_mix.txt'):
         input,ratio,output=readmix('')
         _,parent=get_parent()
         data=[]
@@ -3685,11 +3570,11 @@ def mix(args):
         for i in range(len(input)):
             data.append([])
             for j in range(len(input[i])):
-                x=glob.glob(input[i][j]+'_cleaned_*.csv')
+                x=glob(input[i][j]+'_cleaned_*.csv')
                 if not x:
-                    x=glob.glob(input[i][j]+'_aad.csv')+glob.glob(input[i][j]+'_aad.csv')
+                    x=glob(input[i][j]+'_aad.csv')+glob(input[i][j]+'_aad.csv')
                     if not x:
-                        x=glob.glob(input[i][j])
+                        x=glob(input[i][j])
                         if not x:
                             print('  '+input[i][j]+' not found!\n\n')
                             sys.exit()
@@ -3752,14 +3637,14 @@ def mix(args):
     f.write('# RATIO\nInstructions: write one number per line, in the same order as the libraries in the previous section.\n\n')
     f.write('# OUTPUT\nInstructions: write prefix of mix output files (full file names will be created automatically).\n\n')
     f.close()
-    x=glob.glob('*cleaned_aad.csv')+glob.glob('*cleaned_md.csv')
+    x=glob('*cleaned_aad.csv')+glob('*cleaned_md.csv')
     x=sorted(set([n[:n.rfind('_cleaned_')] for n in x]))
     print('  Existing data prefixes in current directory:')
     print('\n  '+'\n  '.join(x)+'\n')
     print('  Edit the file caplib3_mix.txt before running caplib3 mix (without argument to process the edited file)!\n\n')
 
 def get_parent():
-    check_file('caplib3.conf',True)
+    dbl.check_file('caplib3.conf',True)
     g=open('caplib3.conf','r')
     x=1
     for l in g:
@@ -3768,38 +3653,29 @@ def get_parent():
             break
         if l[:16]=='# Parent protein':
             x=0
-    check_file(x,True)
+    dbl.check_file(x,True)
     y=readseq(x).upper()
     g.close()
     return x,y
-
-def check_format(x):
-    format=''
-    if x not in ('Single multipage pdf','svg','png','jpg','jpeg','pdf','ps','eps','pgf','raw','rgba','tif','tiff'):
-        print("\n  File format not recognized. Options are svg, png, jpg, pdf, ps, eps, pgf, raw, rgba, tif, tiff (or single multipage pdf file with no -f argument).\n")
-        sys.exit()
-    if len(x)<5:
-        format=x
-    return format
 
 def compare(args):
     global vrlist,links,number,pp,lt
     if args.new:
         rename('caplib3_compare.txt')
         rename('compare_table.csv')
-    format=check_format(args.file_format)
+    format=dbl.check_plot_format(args.file_format)
     vrlist,links,number,pp,lt=readinit('extract')
     if args.input_files=='auto':
         x='*.*'
-        if glob.glob('caplib3_compare.txt'):
+        if glob('caplib3_compare.txt'):
             compare2(format)
             return
     else:
         x=args.input_files
-    files=glob.glob(x)
+    files=glob(x)
     files=[n for n in files if ('report.txt' in n or 'cleaned' in n or 'design' in n or 'complexity' in n or '_crude-' in n)]
     if not '.csv' in x and len([n for n in files if 'clean_report.txt' in n])==0:
-        files.extend(glob.glob('All_clean_report.txt'))
+        files.extend(glob('All_clean_report.txt'))
     if not files:
         print("\n  Files not found. Check pattern, or move to correct directory, or include path in pattern.\n")
         sys.exit()
@@ -3864,7 +3740,7 @@ def compare(args):
         B=('Instructions: Each group surrounded by empty lines will be a separate chart. Data in same line (separated by blank space) will have same color and different symbol (10 max). Data in different lines will have different color (10 max).\n\n','Instructions: Each group surrounded by empty lines will be a separate chart. Data in same line (separated by blank space) will have different colors and will be grouped together.\n\n')
         C=(3,25)
         design=''
-        n=glob.glob('*-complexity.txt')
+        n=glob('*-complexity.txt')
         if len(n)==1:
             design=n[0].replace('-complexity.txt','_design')
         for c in range(2):
@@ -4025,13 +3901,13 @@ def compare2(format):
         vrdic={}
         for n in vrlist:
             vrdic[n[0]]=n[1:]
-        if not glob.glob('compare_table.csv'):
-            x=glob.glob('*complexity.txt')
+        if not glob('compare_table.csv'):
+            x=glob('*complexity.txt')
             if not x:
                 print('\n  Library complexity file not found. Run caplib3 init to recreate it (with same arguments that were used for reads processing).\n')
                 sys.exit()
             if len(x)>1:
-                check_file('caplib3.conf',True)
+                dbl.check_file('caplib3.conf',True)
                 g=open('caplib3.conf','r')
                 y=''
                 for gline in g:
@@ -4103,7 +3979,7 @@ def compare2(format):
             g.write('Most common length (% reads),Most common sequence (% reads)')
             if len(vrlist[0])==6:
                 g.write(',Expected mutations per read,Observed mutations per read,Expected % mutant,Observed % mutant\n')
-            names=[n[:n.find('_extract_report.txt')] for n in glob.glob('*_extract_report.txt')]
+            names=[n[:n.find('_extract_report.txt')] for n in glob('*_extract_report.txt')]
             if not names:
                 print('  Extract report files missing!\n\n')
                 sys.exit()
@@ -4274,10 +4150,10 @@ def compare2(format):
             z='tab10'
             if len(cov)>10:
                 z='tab20'
-            colors,fig=startplot(z,gname+' Parental coverage evolution')
+            colors,fig=dbl.plot_start(z,gname+' Parental coverage evolution')
             plt.ylabel('%')
             plt.stackplot(x,[cov[k] for k in s2],labels=s2,baseline='wiggle',colors=colors.colors,alpha=0.8)
-            counter=endplot(fig,counter,'parental_evolution-',format,mppdf)
+            counter=dbl.plot_end(fig,counter,'parental_evolution-',format,mppdf)
             s1=[]
         if task=='Evolution':
             if (not line and not s1) or line[:13]=='Instructions:':
@@ -4447,14 +4323,14 @@ def compare2(format):
                 z='tab20'
             if title=='auto':
                 title=gname+' Sequence frequency evolution'
-            colors,fig=startplot(z,title)
+            colors,fig=dbl.plot_start(z,title)
             if x[0].isdigit():
                 plt.xlabel('Round of selection')
             plt.ylabel('%')
             plt.xlim(0,len(x)-1)
             plt.ylim(0,100)
             plt.stackplot(x,[freqs[k] for k in s2],labels=s3,colors=colors.colors[:len(s2)-1]+COLORS[:max(0,len(s2)-21)]+('whitesmoke',),alpha=0.8)
-            counter=endplot(fig,counter,'frequency_evolution-',format,mppdf)
+            counter=dbl.plot_end(fig,counter,'frequency_evolution-',format,mppdf)
             s1=[]
         if task=='Enrich':
             if line[:8]=='# Parent':
@@ -4488,9 +4364,9 @@ def compare2(format):
             for n in sorted(parent):
                 x='_aad.csv'
                 if not 'design' in n:
-                    if check_file(n+'_cleaned'+x,False):
+                    if dbl.check_file(n+'_cleaned'+x,False):
                         x='_cleaned'+x
-                    elif not check_file(n+x,False):
+                    elif not dbl.check_file(n+x,False):
                         print(' Failed to find amino acid distribution file for '+n+'!\n')
                         sys.exit()
                 g=open(n+x,'r')
@@ -4505,9 +4381,9 @@ def compare2(format):
             for n in sorted(child):
                 x='_aad.csv'
                 if not 'design' in n:
-                    if check_file(n+'_cleaned'+x,False):
+                    if dbl.check_file(n+'_cleaned'+x,False):
                         x='_cleaned'+x
-                    elif not check_file(n+x,False):
+                    elif not dbl.check_file(n+x,False):
                         print(' Failed to find amino acid distribution file for '+n+'!\n')
                         sys.exit()
                 g=open(n+x,'r')
@@ -4599,7 +4475,7 @@ def compare2(format):
                 for j in range(len(cdata[0])):
                     if cdata[i][j]>lim:
                         cdata[i][j]=lim
-            colors,fig=startplot('tab10','Protein complexity')
+            colors,fig=dbl.plot_start('tab10','Protein complexity')
             z=0.94/len(s1[0])
             w=z*0.9
             for i in range(len(s1[0])):
@@ -4612,7 +4488,7 @@ def compare2(format):
             plt.yscale('log')
             plt.xlim(-0.25,len(s1))
             plt.ylim(1,lim)
-            counter=endplot(fig,counter,'protein_complexity-',format,mppdf)
+            counter=dbl.plot_end(fig,counter,'protein_complexity-',format,mppdf)
             s1=[]
         if task=='Cardinality':
             if (not line and not s1) or line[:13]=='Instructions:':
@@ -4648,7 +4524,7 @@ def compare2(format):
                 s1=[]
                 continue
             markers=['o','P','X',(5,1),'D','s','^','v','>','>']
-            colors,fig=startplot('tab10','Sequence cluster cardinality distribution')
+            colors,fig=dbl.plot_start('tab10','Sequence cluster cardinality distribution')
             for j in range(len(s1[0])):
                 for i in range(len(s1)):
                     if s1[i][j] not in xdata[j]:
@@ -4658,7 +4534,7 @@ def compare2(format):
             plt.yscale('log')
             plt.xlabel("Sequence cluster cardinality")
             plt.ylabel("Fraction of distinct sequences")
-            counter=endplot(fig,counter,'cluster_cardinality_distribution-',format,mppdf)
+            counter=dbl.plot_end(fig,counter,'cluster_cardinality_distribution-',format,mppdf)
             s1=[]
         if task=='Cleaning':
             s2=['Clean reads','Reads failing clean-up','Reads with stop codon','Frame shifted reads','Unmapped reads',]
@@ -4681,7 +4557,7 @@ def compare2(format):
                 s1[4].append(a*float(x[8])/int(x[6]))
                 s1[5].append(float(x[7]))
                 continue
-            colors,fig=startplot('tab10','Data cleaning')
+            colors,fig=dbl.plot_start('tab10','Data cleaning')
             for i in range(5):
                 if i:
                     bottom=[n+m for n,m in zip(bottom,s1[i])]
@@ -4692,33 +4568,13 @@ def compare2(format):
             plt.xlim(-1,len(s1[0]))
             plt.ylim(0,100)
             plt.ylabel('% total reads')
-            counter=endplot(fig,counter,'data_cleaning-',format,mppdf)
+            counter=dbl.plot_end(fig,counter,'data_cleaning-',format,mppdf)
             s1=[]
     if not format:
         mppdf.close()
         print('  All figures were saved into single multipage file: '+fname)
     f.close()
     print()
-
-def startplot(x,y):
-    colors=plt.get_cmap(x)
-    fig=plt.figure(figsize=(12,6.75))
-    plt.title(y,size=15,weight='roman')
-    return colors,fig
-
-def endplot(fig,counter,x,format,mppdf):
-    plt.legend()
-    fig.subplots_adjust(bottom=0.15)
-    fig.tight_layout()
-    if format:
-        counter+=1
-        g=x+str(counter)+'.'+format
-        plt.savefig(g,dpi=600)
-        print('  Figure was saved into file: '+g+'\n')
-    else:
-        mppdf.savefig()
-    plt.close()
-    return counter
 
 def findvp(L,vrdic):
     b=0
@@ -4750,11 +4606,11 @@ def select(args):
     fname='caplib3_select.txt'
     if args.select_file:
         fname=args.select_file
-        check_file(fname,True)
-    format=check_format(args.file_format)
+        dbl.check_file(fname,True)
+    format=dbl.check_plot_format(args.file_format)
     if args.new:
         rename('caplib3_select.txt')
-    if glob.glob(fname):
+    if glob(fname):
         f=open(fname,'r')
         read=''
         combi=[]
@@ -4834,7 +4690,7 @@ def select(args):
                 z='/'
             if z and path[-1]!=z:
                 path+=z
-            if not glob.glob(path+parent[0]+'*'):
+            if not glob(path+parent[0]+'*'):
                 print('  Wrong path or wrong file name '+path+parent[0]+' !\n')
                 sys.exit()
             parent=[parent]
@@ -4843,11 +4699,11 @@ def select(args):
                 mppdf=PdfPages(sname)
             seqs={}
             for n in range(len(child)):
-                x=glob.glob(child[n]+'*cleaned.txt')
+                x=glob(child[n]+'*cleaned.txt')
                 if not x:
-                    x=glob.glob(child[n]+'*.txt')
+                    x=glob(child[n]+'*.txt')
                     if not x:
-                        x=glob.glob(child[n])
+                        x=glob(child[n])
                         if not x:
                             print('  No relevant file found for '+child[n]+'!\n')
                             sys.exit()
@@ -4923,18 +4779,18 @@ def select(args):
             f.close()
             print('  Frequencies of selected sequences were saved into file: '+fname+'\n')
             ratio=[1]
-            if check_file(path+'caplib3_mix.txt',False):
+            if dbl.check_file(path+'caplib3_mix.txt',False):
                 input,x,output=readmix(path)
                 if len(parent[0])==1 and parent[0][0]==output:
                     parent=list(input)
                     ratio=x
             for n in range(len(parent)):
                 for m in range(len(parent[n])):
-                    x=glob.glob(path+parent[n][m]+'*')
+                    x=glob(path+parent[n][m]+'*')
                     if len(x)>1:
-                        x=glob.glob(path+parent[n][m]+'*.txt')
+                        x=glob(path+parent[n][m]+'*.txt')
                         if len(x)>1:
-                            x=glob.glob(path+parent[n][m]+'*_cleaned.txt')
+                            x=glob(path+parent[n][m]+'*_cleaned.txt')
                             if len(x)>1:
                                 x=[i for i in x if len(i)==max(len(j) for j in x)]
                                 if len(x)>1:
@@ -5011,7 +4867,7 @@ def select(args):
             plots=1
             if len(P)==1 and len(P[0])==1:
                 plots-=1
-            if glob.glob('*aae.csv'):
+            if glob('*aae.csv'):
                 plots+=1
             plot=1
             Sscore={}
@@ -5120,7 +4976,7 @@ def select(args):
                 heatmap(fig,plots,plot,'VR enrichment',[Vscore[n] for n in sorted(Vscore)],[n[0] for n in child],sorted(sn))
                 plot+=1
             aae=[]
-            aaef=glob.glob('*aae.csv')
+            aaef=glob('*aae.csv')
             if aaef:
                 for n in child:
                     x=[k for k in aaef if (n[0]+'_aae.csv' in k)]
@@ -5397,8 +5253,8 @@ def select(args):
                         if a in y:
                             z=y[a]/total
                         matrix[-1].append(z)
-                Gscores[-1].append(entropy(matrix))
-            colors,fig=startplot('tab10','Global enrichment')
+                Gscores[-1].append(dbl.entropy(matrix))
+            colors,fig=dbl.plot_start('tab10','Global enrichment')
             sf=10000/max([k[1] for k in Gscores])
             plt.scatter(x=[k[0] for k in child],y=[k[0] for k in Gscores],s=[k[1]*sf for k in Gscores],c=[k[2] for k in Gscores],alpha=0.6)
             plt.ylabel("Max enrichment score")
@@ -5424,7 +5280,7 @@ def select(args):
 # check if caplib3_mix.txt exists, then copy output prefix from it and use it as the parent prefix
 
 
-    x=glob.glob('*_cleaned.txt')
+    x=glob('*_cleaned.txt')
     x=[k[:k.rfind('_')] for k in x]
     if '_' in x[0]:
         x=[k[:k.rfind('_')] for k in x]
@@ -5449,22 +5305,6 @@ def select(args):
     f.write('##### END OF CONFIGURATION FILE ##### ')
     f.close()
     print('\n  Edit the file caplib3_select.txt before running caplib3 select again!\n\n')
-
-def entropy(matrix):
-    score=0
-    for n in matrix:
-        H=0
-        for m in n:
-            if m!=0:
-                H+=m*(math.log(m,2))
-
-
-    # also provide file with entropy values for each position -> plot entropy plots
-
-        H*=-1
-        score+=H
-    return score
-
 
 def seqformat(fname,pp,vrs):
     if '.' in pp:
@@ -5545,7 +5385,7 @@ def heatmap(fig,plots,a,title,score,xlabel,ylabel):
         ax.axes.get_yaxis().set_visible(False)
 
 def f2dl(fname,x,y):
-    check_file(fname,True)
+    dbl.check_file(fname,True)
     f=open(fname,'r')
     temp=f.readlines()
     f.close()
