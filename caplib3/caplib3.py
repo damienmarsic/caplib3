@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-__version__='0.6.7'
-last_update='2022-08-02'
+__version__='0.6.8'
+last_update='2022-08-03'
 author='Damien Marsic, damien.marsic@aliyun.com'
 
 import argparse,sys,gzip,math,regex
@@ -14,7 +14,6 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 ambiguous="ryswkmbdhvn"
 aa="ARNDCQEGHILKMFPSTWYV"
-IUPAC=[set('ag'),set('ct'),set('gc'),set('at'),set('gt'),set('ac'),set('cgt'),set('agt'),set('act'),set('acg'),set('atgc')]
 COLORS=('blue','yellow','lime','red','indigo','peru','deeppink','olive','cyan','teal')
 
 def version():
@@ -621,7 +620,7 @@ def main():
     parser.add_argument('-v','--version',nargs=0,action=override(version),help="Display version")
     subparser=parser.add_subparsers(dest='command',required=True)
     parser_a=subparser.add_parser('demux',help="Demultiplex based on primer sequences")
-    parser_a.add_argument('-d','--demux_file',type=str,default='*demux.txt',help="File containing the primer sequences and sample definitions, wildcards accepted (default: single *demux.txt file in the current directory")
+    parser_a.add_argument('-d','--demux_file',type=str,default='*demux.conf',help="File containing the primer sequences and sample definitions, wildcards accepted (default: single *demux.conf file in the current directory")
     parser_a.add_argument('-r','--read_file',type=str,default='auto',help="File containing the sequencing reads, format: fasta, fastq or gzipped fastq, using wildcards. Always use quotes when using wildcards or path (ex. '*.fq.gz' or 'directory/*.fastq'). Note that only a single file will be selected. Default: autodetect.")
     parser_a.add_argument('-n','--new',default=False,action='store_true',help="Create new caplib3_demux.txt file and rename existing file")
     parser_a.add_argument('-f','--force',default=False,action='store_true',help="Force demutiplexing using current configuration instead of splitting in groups using similar primers.")
@@ -954,10 +953,10 @@ def seq2aln(seqs,ref,pos):
 def demux(args):
     global mcount,rcount,T,primers
     if args.new:
-        rename('caplib3_demux.txt')
+        rename('caplib3_demux.conf')
     dfile=glob(args.demux_file)
-    if args.new or (len(dfile)==0 and len(glob('*demux.txt'))==0):
-        with open('caplib3_demux.txt','w') as f:
+    if args.new or (len(dfile)==0 and len(glob('*demux.conf'))==0):
+        with open('caplib3_demux.conf','w') as f:
             f.write('# Forward primers, 1 per line: name and sequence (separated by space or tab)\n\n')
             f.write('# Reverse primers, 1 per line: name and sequence (separated by space or tab)\n\n')
             f.write('# Additional internal sequences, 1 per line: name and sequence (separated by space or tab)\n\n')
@@ -965,10 +964,10 @@ def demux(args):
             f.write('# Leftover reads: Enter file name into which leftover reads will be saved (.fasta extension will be added automatically to the file name). Leftover reads will not be saved if left empty.\n\n')
             f.write('# Trim reads (both ends), options: P (whole primer sequence), positive integer (number of nt to remove from 5\' end), negative integer (number of nt to keep in each primer)\n\n')
             f.write('# Junk to be discarded: all reads containing any of the following sequences will be discarded. Insert optional name before the sequence, followed by space or tab. Optional 2 numbers (separated by a space or tab) after each sequence restrict searching for the sequence within a particular read region (0: first nt of the F primer). If single number, the read will be searched from that number to the read end.\n\n')
-        print('\n  Creating file caplib3_demux.txt.\n  Please edit the file, save it under the name of your choice and run the command again.\n\n')
+        print('\n  Creating file caplib3_demux.conf.\n  Please edit the file, save it under the name of your choice and run the command again.\n\n')
         sys.exit()
     elif len(dfile)==0:
-        print('\n  File not found! \n\n')
+        print('\n  Demux file not found! \n\n')
         sys.exit()
     if len(dfile)>1:
         print('\n  More than one demux file was found in the current directory. Select the one you wish to use using the -i argument followed by the file name.')
@@ -987,7 +986,7 @@ def demux(args):
         junk=[]
         x=''
         q=0
-        failed=False
+        fail=''
         for line in f:
             if line[0]=='#':
                 x=line[2]
@@ -1000,15 +999,13 @@ def demux(args):
                     if l[3:][i][0] not in '+-':
                         l[3+i]='+'+l[3:][i]
                 if l[1] not in fp.values() or l[2] not in rp.values():
-                    print('\n  Invalid sample definition: primer pair '+l[1]+','+l[2]+' not found!\n\n')
-                    sys.exit()
+                    fail+='\n  Invalid sample definition: primer pair '+l[1]+','+l[2]+' not found!'
                 a=[k[1:] for k in l[3:] if k[1:] not in ais]
                 if a:
-                    print('\n  Invalid sample definition: sequence(s) '+', '.join(a)+' not found!\n\n')
-                    sys.exit()
+                    fail+='\n  Invalid sample definition: sequence(s) '+', '.join(a)+' not found!'
                 a=tuple(l[1:])
                 if a in sd or ''.join(map(str,a)) in ''.join(map(str,sd.keys())) or (sd and ''.join(map(str,sd.keys())) in ''.join(map(str,a))):
-                    failed=True
+                    fail+='\n  Duplicate sample definition found!'
                     break
                 sd[a]=l[0]
                 continue
@@ -1016,10 +1013,9 @@ def demux(args):
                 a=l[1].lower()
                 for n in a:
                     if n not in 'atgc':
-                        print('\n  Invalid sequence!\n  '+l[0]+'\t'+l[1]+'\n\n')
-                        sys.exit()
+                        fail+='\n  Invalid sequence!\n  '+l[0]+'\t'+l[1]
                 if l[0] in fp.values() or l[0] in rp.values() or l[0] in ais.values() or a in fp or a in rp or a in ais:
-                    failed=True
+                    failed+='\n  Duplicate sequence found!'
                     break
             if x=='A':
                 ais[l[0]]=a
@@ -1029,8 +1025,7 @@ def demux(args):
                 rp[a]=l[0]
             if x=='T':
                 if len(l)>1 or (not l[0].replace('-','').isdigit() and l[0] not in 'Pp'):
-                    print('\n  Invalid trim parameter!\n\n')
-                    sys.exit()
+                    fail+='\n  Invalid trim parameter!'
                 if l[0] in 'Pp':
                     T='P'
                 else:
@@ -1044,18 +1039,18 @@ def demux(args):
                     l[1]=l[1].lower()
                     for n in l[1]:
                         if n not in 'atgc':
-                            failed=True
+                            fail+='\n  '+n+' is not a valid nucleotide!'
                             break
                     else:
                         m=l[0]
                         l=l[1:]
                 if len(l)>3 or (1<len(l)<4 and not l[-1].isdigit()) or (len(l)==3 and not l[1].isdigit()):
-                    failed=True
+                    fail+='\n  Each line of the junk section, if not empty, must contain a DNA sequence optionally followed by 1 or 2 numbers!'
                     break
                 l[0]=l[0].lower()
                 for n in l[0]:
                     if n not in 'atgc':
-                        failed=True
+                        fail+='\n  '+n+' is not a valid nucleotide!'
                         break
                 else:
                     a=0
@@ -1067,17 +1062,16 @@ def demux(args):
                     junk.append([m,l[0],a,b])
                     continue
                 break
-    if failed and x=='J':
-        print('\n  Invalid demux file! Each line of the junk session, if not empty, must contain a DNA sequence optionally followed by 1 or 2 numbers!\n\n')
-        sys.exit()
-    if failed:
-        print('\n  Invalid demux file! Please make sure all names, sequences and definitions are unique and mutually exclusive!\n\n')
-        sys.exit()
     if len(fp)==0 or len(rp)==0 or len(sd)==0:
-        print('\n  Invalid demux file! Primers or sample definitions are missing!\n\n')
+        fail+='\n  Primers or sample definitions are missing!\n\n'
+    if fail:
+        print('\n  Invalid demux file!'+fail+'\n')
         sys.exit()
+    x=[k[0] for k in sd]+[k[1] for k in sd]
+    fp={k:fp[k] for k in fp if fp[k] in x}
+    rp={k:rp[k] for k in rp if rp[k] in x}
     l=set([len(x) for x in fp]+[len(x) for x in rp])
-    primers={v:k  for k,v in {**fp, **rp}.items()}
+    primers={v:k  for k,v in {**fp,**rp}.items()}
     fps=list(fp.keys())+list(rp.keys())
     if len(l)>1:
         for n in (fp,rp):
@@ -1089,54 +1083,43 @@ def demux(args):
                 if len(i)!=min(l):
                     n[i[:min(l)]]=n[i]
                     del n[i]
-    cmode=True
-    b=0
-    for n in (fp,rp):
-        a=list(n.keys())[0]
-        for i in range(1,len(a)):
-            for m in n:
-                if m[-i:]!=a[-i:]:
-                    break
-            else:
-                continue
+    for i in range(min(10,min(l)),min(l)+1):
+        x=[k[:i] for k in (sorted(fp)+sorted(rp))]
+        if len(set(x))==len(x):
             break
-        b=max(b,len(a)-i+1)
-        if i==1 and not args.force:
-            print('\n  Split demultiplexing into groups with similar primers to improve results. If you want to proceed anyway, add the -f argument to the command.')
-            sys.exit()
-        if i==1:
-            k=len(a)
-        else:
-            k=-i+1
-        for m in n:
-            if len(dbl.compress(m[:k]))!=len(m[:k]):
-                cmode=False
-                break
-    if dbl.diff([n[:b] for n in fp])>2 and dbl.diff([n[:b] for n in rp])>2:
-        while dbl.diff([n[:b] for n in list(fp.keys())+list(rp.keys())])<=2:
-            b+=1
-            if b==len(a):
-                break
-        b=min(b+1,len(a))
-    else:
-        b=min(b+3,len(a))
-    for n in (fp,rp):
-        for m in list(n.keys()).copy():
-            if cmode:
-                y=dbl.compress(m)
-                if y[:min(len(y),b)]!=m:
-                    n[y[:min(len(y),b)]]=n[m]
-                    del n[m]
-            else:
-                if b!=len(m):
-                    n[m[:b]]=n[m]
-                    del n[m]
-    x=list(fp.keys())+list(rp.keys())
-    if dbl.diff(x)>2:
-        ec=True
+    for j in range(i,min(l)+1):
+        if dbl.diff([k[:j] for k in sorted(fp)+sorted(rp)])>2:
+            ec=True
+            i=j
+            break
     else:
         ec=False
-        print('\n  Warning! Poor quality barcodes. Error correction can not be used because barcodes are not different enough from each other.')
+    for j in range(i,min(l)+1):
+        x=[k[:j] for k in (sorted(fp)+sorted(rp))]
+        y=[dbl.compress(k) for k in x]
+        z=min([len(k) for k in y])
+        if len(set(y))==len(x) and ((dbl.diff([k[:z] for k in y])>2 and ec) or not ec):
+            cmode=True
+            i=j
+            if dbl.diff([k[:z] for k in y])>2:
+                ec=True
+            break
+    else:
+        cmode=False
+    if cmode:
+        fp={dbl.compress(k[:i]):fp[k] for k in fp}
+        rp={dbl.compress(k[:i]):rp[k] for k in rp}
+    else:
+        fp={k[:i]:fp[k] for k in fp}
+        rp={k[:i]:rp[k] for k in rp}
+    x='off'
+    if ec:
+        x='on'
+    print('\n  Error correction is '+x)
+    x='off'
+    if cmode:
+        x='on'
+    print('\n  Compressed mode is '+x)
     if args.read_file!='auto':
         rfile=glob(args.read_file)
     else:
@@ -1227,7 +1210,7 @@ def demux(args):
     files={n:open(n+'.fasta','w') for n in sd.values()}
     if leftover:
         files[leftover]=open(leftover+'.fasta','w')
-    L=b*3
+    L=i*3
     print('\n  Processing read file, please wait...')
     name2=''
     while True:
@@ -1671,7 +1654,7 @@ def init(args):
                         l=lib_nt[i:a]
                     q=''
                     for x in range(len(p)):
-                        q+=ambiguous[IUPAC.index(set((l[x],p[x])))]
+                        q+=ambiguous[dbl.IUPAC.index(set((l[x],p[x])))]
                     lib2=lib2[:i]+q+lib2[a:]
                 while b<=j and lib_nt[a:b] in par_nt[par_nt.find(A)+len(A):]:
                     b+=1

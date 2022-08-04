@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: caplib3
-Version: 0.6.7
+Version: 0.6.8
 Summary: NGS data analysis of capsid libraries
 Home-page: https://github.com/damienmarsic/caplib3
 Author: Damien Marsic
@@ -16,3 +16,9 @@ License-File: LICENSE
 
 # caplib3
 NGS data analysis of capsid libraries
+
+Work in progress, do not use unless you know what you are doing!
+
+Installation: pip install caplib3
+
+Run: python -m caplib3
