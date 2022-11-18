@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-__version__='0.6.8'
-last_update='2022-08-03'
+__version__='0.6.9'
+last_update='2022-10-21'
 author='Damien Marsic, damien.marsic@aliyun.com'
 
 import argparse,sys,gzip,math,regex
@@ -661,7 +661,7 @@ def main():
     parser_h.add_argument('-f','--file_format',type=str,default='Single multipage pdf',help="Save each figure in separate file with choice of format instead of the default single multipage pdf file. Choices: svg, png, jpg, pdf, ps, eps, pgf, raw, rgba, tif")
     parser_h.add_argument('-n','--new',default=False,action='store_true',help="Create new caplib3_compare.txt and compare_table.csv files and rename existing files")
     parser_i=subparser.add_parser('select',help="Select most enriched variants")
-    parser_i.add_argument('-s','--select_file',type=str,help="Configuration file to be used by the select program (bypass the default file caplib3_select.txt)")
+    parser_i.add_argument('-s','--select_file',type=str,default='caplib3_select.conf',help="Configuration file to be used by the select program (bypass the default file caplib3_select.txt)")
     parser_i.add_argument('-f','--file_format',type=str,default='Single multipage pdf',help="Save each figure in separate file with choice of format instead of the default single multipage pdf file. Choices: svg, png, jpg, pdf, ps, eps, pgf, raw, rgba, tif")
     parser_i.add_argument('-n','--new',default=False,action='store_true',help="Create new caplib3_select.txt file and rename existing file")
     parser_j=subparser.add_parser('aa2nt',help="identify original nucleotide sequences encoding a list of selected amino acid sequences")
@@ -917,10 +917,10 @@ def seq2aln(seqs,ref,pos):
     if len(ref!=len(pos)):
         fail+='\n  Reference and position must have the same number of items!'
     for n in seqs:
-        if isinsitance(seqs[n],str):
+        if isinstance(seqs[n],str):
             seqs[n]=sqs[n].split(',')
     for n in seqs:
-        if not isinsitance(seqs[n],(list,tuple)) or len(seqs[n])!=len(ref):
+        if not isinstance(seqs[n],(list,tuple)) or len(seqs[n])!=len(ref):
             fail+='\n  Sequences must be either strings or lists, and each sequence must have the same number of items as the reference!'
             break
     if fail:
@@ -953,7 +953,7 @@ def seq2aln(seqs,ref,pos):
 def demux(args):
     global mcount,rcount,T,primers
     if args.new:
-        rename('caplib3_demux.conf')
+        dbl.rename('caplib3_demux.conf')
     dfile=glob(args.demux_file)
     if args.new or (len(dfile)==0 and len(glob('*demux.conf'))==0):
         with open('caplib3_demux.conf','w') as f:
@@ -1067,6 +1067,10 @@ def demux(args):
     if fail:
         print('\n  Invalid demux file!'+fail+'\n')
         sys.exit()
+
+    print(sd)
+
+
     x=[k[0] for k in sd]+[k[1] for k in sd]
     fp={k:fp[k] for k in fp if fp[k] in x}
     rp={k:rp[k] for k in rp if rp[k] in x}
@@ -1591,13 +1595,15 @@ def init(args):
         temp1+='-aa.fasta'
     temp1=temp1[temp1.rfind('\\')+1:]
     temp1=temp1[temp1.rfind('/')+1:]
+    if lib_aa[-1]=='*':
+        lib_aa=lib_aa[:-1]
     with open(temp1,'w') as f:
         f.write('>'+temp1[:-6]+'\n'+lib_aa+'\n')
     print('\n  Library protein sequence was saved as '+temp1)
     vrl2=''
     if dbl.check_file('caplib3.conf',False):
         vrl2=[k[0] for k in readinit('link')]
-    rename('caplib3.conf')
+    dbl.rename('caplib3.conf')
     ifile=open('caplib3.conf','w')
     ifile.write('# Library type:\ndefined\n\n')
     ifile.write('# Library nucleotide sequence file name:\n'+args.lib_file+'\n\n# Library protein sequence file name:\n'+temp1)
@@ -1610,6 +1616,8 @@ def init(args):
             temp1+='-aa.fasta'
         temp1=temp1[temp1.rfind('\\')+1:]
         temp1=temp1[temp1.rfind('/')+1:]
+        if par_aa[-1]=='*':
+            par_aa=par_aa[:-1]
         with open(temp1,'w') as f:
             f.write('>'+temp1[:-6]+'\n'+par_aa+'\n')
         print('\n  Parent protein sequence was saved as '+temp1)
@@ -1925,8 +1933,8 @@ def extract():
         l=f.readline().strip()
         if not l or l[0] not in ('>','@'):
             f.close()
-            continue
             print('  '+x+' does not look like a fastq or fasta file.\n')
+            continue
         print('\n  Processing read file: '+x[0])
         if l[0]=='>':
             y=2
@@ -2052,11 +2060,12 @@ def extract():
                 'Valid sequences (length multiple of 3 and no stop codon): '+str(total)):
                 print('    '+T)
                 h.write('\n  '+T)
+            if i<len(x[3]):
+                es.append(int(len(vrdic[x[3][i]][2])/3))
             if total==0:
                 continue
             if i<len(x[3]):
                 mcs=int(max(vrcnt[i][0], key=vrcnt[i][0].get))
-                es.append(int(len(vrdic[x[3][i]][2])/3))
                 for T in ('Size distribution of extracted protein sequences was saved into file: '+x[1]+'_'+x[3][i]+'_extracted_sd.csv',
                     'Most common size: '+str(mcs)+' aa (expected: '+str(es[-1])+' aa), '+f'{(vrcnt[i][0][mcs]/total*100):.2f}'+'% of sequences'):
                     print('    '+T)
@@ -2098,15 +2107,16 @@ def extract():
                 T='Next most common sequence: '+str(temp[1][0])+', '+f'{(temp[1][1][0]/total*100):.2f}'+'% of sequences'
                 print('    '+T)
                 h.write('\n  '+T)
-        aa_dist(aaseq,es,x[3],number,vrdic,x[1]+'_extracted_aad.csv')
-        T='Amino acid distribution of extracted protein sequences of expected size was saved into file: '+x[1]+'_extracted_aad.csv'
-        print('\n  '+T)
-        h.write('\n\n'+T+'\n')
-        if len(vrlist[0])==6:
-            T='Mutation distribution of extracted protein sequences of expected size was saved into file: '+x[1]+'_extracted_md.csv'
+        if total:
+            aa_dist(aaseq,es,x[3],number,vrdic,x[1]+'_extracted_aad.csv')
+            T='Amino acid distribution of extracted protein sequences of expected size was saved into file: '+x[1]+'_extracted_aad.csv'
             print('\n  '+T)
-            h.write(T+'\n\n')
-        h.close()
+            h.write('\n\n'+T+'\n')
+            if len(vrlist[0])==6:
+                T='Mutation distribution of extracted protein sequences of expected size was saved into file: '+x[1]+'_extracted_md.csv'
+                print('\n  '+T)
+                h.write(T+'\n\n')
+            h.close()
         print('  Report saved into file: '+x[1]+'_extract_report.txt\n')
 
 def clean(args):
@@ -2144,7 +2154,10 @@ def clean(args):
             sys.exit()
         par=par[0]
     if par:
-        par=dbl.getfasta(par,dbl.aa,dbl.aa,True)
+        par,fail=dbl.getfasta(par,dbl.aa,dbl.aa,True)
+        if fail:
+            print('\n  '+fail+'\n')
+            sys.exit()
     length=args.length.replace(' ','').split(',')
     bad=False
     if len(length)!=4:
@@ -2231,6 +2244,9 @@ def clean(args):
             total=int(total)
         else:
             dbl.pr2(r,'\n  File '+fname+' is not a valid input file !\n')
+            continue
+        if not total:
+            dbl.pr2(r,'\n  File '+fname+' does not contain any sequence!\n')
             continue
         x=f.readline().strip()
         defined=False
@@ -2584,7 +2600,10 @@ def extract2(args):
     grain=args.crude_extract
 # Detect reading frames and generate protein sequences
     print('                 OK\n\n  Processing parental sequences...',end='')
-    par=dbl.getfasta(par,'atgc','atgc',True)
+    par,fail=dbl.getfasta(par,'atgc','atgc',True)
+    if fail:
+        print('\n  '+fail+'\n')
+        sys.exit()
     par_aa={}
     save_par=False
     for n in sorted(par):
@@ -2616,7 +2635,7 @@ def extract2(args):
         par_aa[n]=aaseq
     if save_par:
         print('      OK\n')
-        rename(args.parents)
+        dbl.rename(args.parents)
         f=open(args.parents,'w')
         for n in sorted(par):
             f.write('>'+n+'\n'+par[n]+'\n')
@@ -3194,7 +3213,10 @@ def extract2(args):
                             if n not in wb and seq[i][1][j:] in par_aa[n]:
                                 wb[n]=j
                                 if i<len(seq)-1:
-                                    for b in range(1,seq[i+1][3]-seq[i-1][2]):
+                                    w=0
+                                    if i:
+                                        w=seq[i-1][2]
+                                    for b in range(1,seq[i+1][3]-w):
                                         if seq[i][1][j:]+par_aa[seq[i+1][1]][seq[i+1][2]:seq[i+1][2]+b] not in par_aa[n]:
                                             b-=1
                                             break
@@ -3544,7 +3566,7 @@ def findreadfiles(pattern,seqtype,exclude):
 
 def mix(args):
     if args.new:
-        rename('caplib3_mix.txt')
+        dbl.rename('caplib3_mix.txt')
     if glob('caplib3_mix.txt'):
         input,ratio,output=readmix('')
         _,parent=get_parent()
@@ -3644,8 +3666,8 @@ def get_parent():
 def compare(args):
     global vrlist,links,number,pp,lt
     if args.new:
-        rename('caplib3_compare.txt')
-        rename('compare_table.csv')
+        dbl.rename('caplib3_compare.txt')
+        dbl.rename('compare_table.csv')
     format=dbl.check_plot_format(args.file_format)
     vrlist,links,number,pp,lt=readinit('extract')
     if args.input_files=='auto':
@@ -3662,7 +3684,7 @@ def compare(args):
     if not files:
         print("\n  Files not found. Check pattern, or move to correct directory, or include path in pattern.\n")
         sys.exit()
-    rename('caplib3_compare.txt')
+    dbl.rename('caplib3_compare.txt')
     f=open('caplib3_compare.txt','w')
     s=[n[:-16] for n in files if ('cleaned_cnd.csv' in n)]
     temp=[]
@@ -3672,7 +3694,9 @@ def compare(args):
                 if n[1]+'_'+m in s:
                     temp.append(n[1]+'_'+m)
             if len(n)>4:
-                temp.append([x for x in s if (n[1] in x and '-' in x[x.rfind('_'):])][0])
+                m=[x for x in s if (n[1] in x and '-' in x[x.rfind('_'):])]
+                if m:
+                    temp.append(m[0])
     for n in s:
         if not n in temp:
             temp.append(n)
@@ -3829,12 +3853,8 @@ def compare(args):
             s2=[k for k in s if n in k]
             s2.sort()
             if 'cleaned' in n:
-                if [k for k in s if n in k and '_VR' in k]:
-                    s3=set([k[:k.find('_VR')] for k in s2])
-                    s6=sorted(set([k[k.find('_VR'):] for k in s2]))
-                else:
-                    s3=set([k[:k.rfind('_cleaned')] for k in s2])
-                    s6=sorted(set([k[k.find('_cleaned'):] for k in s2]))
+                s3=set([k[:k.find('_')] for k in s2])
+                s6=sorted(set([k[k.find('_'):] for k in s2]))
             else:
                 s3=[k[:k.rfind('_crude-')] for k in s2]
                 s6=sorted(set([k[k.find('_crude-'):] for k in s2]))
@@ -3992,6 +4012,8 @@ def compare2(format):
                         if i in (1,2,3,4,10):
                             j.append(int(ln[ln.find(':')+2:]))
                     elif vr and j and not ln:
+                        if len(j)<5:
+                            break
                         i=-1
                         temp=vr.split('-')
                         a=sum([len(vrdic[n][2])//3 for n in temp])
@@ -4028,7 +4050,7 @@ def compare2(format):
     if format:
         mppdf=''
     else:
-        rename('compare_figs.pdf')
+        dbl.rename('compare_figs.pdf')
         fname='compare_figs.pdf'
         mppdf=PdfPages(fname)
     task=''
@@ -4090,7 +4112,7 @@ def compare2(format):
                     n=int(line[-1])
                     line=line[0][1:-1].split('),(')
                     x=[k.split(',') for k in line]
-                    if x[0][0].isdigit():
+                    if x[-1][0].isdigit():
                         if len(x[-1])==4:
                             total+=n*(int(x[-1][0])+int(x[-1][3])-int(x[-1][2]))
                         else:
@@ -4133,10 +4155,12 @@ def compare2(format):
             z='tab10'
             if len(cov)>10:
                 z='tab20'
-            colors,fig=dbl.plot_start(z,gname+' Parental coverage evolution')
+            counter+=1
+            colors,fig=dbl.plot_start(z,None,gname+' Parental coverage evolution')
             plt.ylabel('%')
             plt.stackplot(x,[cov[k] for k in s2],labels=s2,baseline='wiggle',colors=colors.colors,alpha=0.8)
-            counter=dbl.plot_end(fig,counter,'parental_evolution-',format,mppdf)
+            plt.legend()
+            dbl.plot_end(fig,'parental_evolution-'+str(counter),format,mppdf)
             s1=[]
         if task=='Evolution':
             if (not line and not s1) or line[:13]=='Instructions:':
@@ -4163,8 +4187,6 @@ def compare2(format):
                 continue
             if line:
                 x=line.split()
-                if not 'cleaned.txt' in x[0]:
-                    x[0]+='_cleaned.txt'
                 s1.append(x)
                 continue
             freqs={}
@@ -4229,7 +4251,9 @@ def compare2(format):
                 b=''
                 e=''
             d=s1[-1][0][:s1[-1][0].rfind('_')]
-            c=d[:d.rfind('_')]
+            c=d
+            if d.rfind('_')!=-1:
+                c=d[:d.rfind('_')]
             gname=a+'-'+c+e
             if title=='auto':
                 title=a+' to '+c+e.replace('_',' ')+' Sequence frequency evolution'
@@ -4306,14 +4330,16 @@ def compare2(format):
                 z='tab20'
             if title=='auto':
                 title=gname+' Sequence frequency evolution'
-            colors,fig=dbl.plot_start(z,title)
+            counter+=1
+            colors,fig=dbl.plot_start(z,None,title)
             if x[0].isdigit():
                 plt.xlabel('Round of selection')
             plt.ylabel('%')
             plt.xlim(0,len(x)-1)
             plt.ylim(0,100)
             plt.stackplot(x,[freqs[k] for k in s2],labels=s3,colors=colors.colors[:len(s2)-1]+COLORS[:max(0,len(s2)-21)]+('whitesmoke',),alpha=0.8)
-            counter=dbl.plot_end(fig,counter,'frequency_evolution-',format,mppdf)
+            plt.legend()
+            dbl.plot_end(fig,'frequency_evolution-'+str(counter),format,mppdf)
             s1=[]
         if task=='Enrich':
             if line[:8]=='# Parent':
@@ -4453,12 +4479,17 @@ def compare2(format):
             else:
                 xlabels=[n[-1] for n in s1]
             locs=list(range(len(s1)))
-            lim=max([n+m for n,m in zip([x for y in cdata for x in y if '_design' not in s1[0][cdata.index(y)]],[x for y in rdata for x in y if '_design' not in s1[0][rdata.index(y)]])])*2
+            k=[n+m for n,m in zip([x for y in cdata for x in y if '_design' not in s1[0][cdata.index(y)]],[x for y in rdata for x in y if '_design' not in s1[0][rdata.index(y)]])]
+            if k:
+                lim=max(k)*2
+            else:
+                lim=0
             for i in range(len(cdata)):
                 for j in range(len(cdata[0])):
                     if cdata[i][j]>lim:
                         cdata[i][j]=lim
-            colors,fig=dbl.plot_start('tab10','Protein complexity')
+            counter+=1
+            colors,fig=dbl.plot_start('tab10',None,'Protein complexity')
             z=0.94/len(s1[0])
             w=z*0.9
             for i in range(len(s1[0])):
@@ -4471,7 +4502,8 @@ def compare2(format):
             plt.yscale('log')
             plt.xlim(-0.25,len(s1))
             plt.ylim(1,lim)
-            counter=dbl.plot_end(fig,counter,'protein_complexity-',format,mppdf)
+            plt.legend()
+            dbl.plot_end(fig,'protein_complexity-'+str(counter),format,mppdf)
             s1=[]
         if task=='Cardinality':
             if (not line and not s1) or line[:13]=='Instructions:':
@@ -4507,7 +4539,8 @@ def compare2(format):
                 s1=[]
                 continue
             markers=['o','P','X',(5,1),'D','s','^','v','>','>']
-            colors,fig=dbl.plot_start('tab10','Sequence cluster cardinality distribution')
+            counter+=1
+            colors,fig=dbl.plot_start('tab10',None,'Sequence cluster cardinality distribution')
             for j in range(len(s1[0])):
                 for i in range(len(s1)):
                     if s1[i][j] not in xdata[j]:
@@ -4517,7 +4550,8 @@ def compare2(format):
             plt.yscale('log')
             plt.xlabel("Sequence cluster cardinality")
             plt.ylabel("Fraction of distinct sequences")
-            counter=dbl.plot_end(fig,counter,'cluster_cardinality_distribution-',format,mppdf)
+            plt.legend()
+            dbl.plot_end(fig,'cluster_cardinality_distribution-'+str(counter),format,mppdf)
             s1=[]
         if task=='Cleaning':
             s2=['Clean reads','Reads failing clean-up','Reads with stop codon','Frame shifted reads','Unmapped reads',]
@@ -4540,7 +4574,8 @@ def compare2(format):
                 s1[4].append(a*float(x[8])/int(x[6]))
                 s1[5].append(float(x[7]))
                 continue
-            colors,fig=dbl.plot_start('tab10','Data cleaning')
+            counter+=1
+            colors,fig=dbl.plot_start('tab10',None,'Data cleaning')
             for i in range(5):
                 if i:
                     bottom=[n+m for n,m in zip(bottom,s1[i])]
@@ -4551,7 +4586,8 @@ def compare2(format):
             plt.xlim(-1,len(s1[0]))
             plt.ylim(0,100)
             plt.ylabel('% total reads')
-            counter=dbl.plot_end(fig,counter,'data_cleaning-',format,mppdf)
+            plt.legend()
+            dbl.plot_end(fig,'data_cleaning-'+str(counter),format,mppdf)
             s1=[]
     if not format:
         mppdf.close()
@@ -4586,684 +4622,686 @@ def label(x):
     return a[max(a.rfind('_'),a.rfind('-'))+1:]
 
 def select(args):
-    fname='caplib3_select.txt'
-    if args.select_file:
-        fname=args.select_file
-        dbl.check_file(fname,True)
-    format=dbl.check_plot_format(args.file_format)
+    fname=args.select_file
     if args.new:
-        rename('caplib3_select.txt')
-    if glob(fname):
-        f=open(fname,'r')
-        read=''
-        combi=[]
-        thr=-1
-        tsc=0
-        msc=0
-        print()
-        for line in f:
-            ln=line.strip()
-            if ln[:8]=='# PARENT':
-                read='parent'
-                pre=''
-                path=''
-                parent=''
-                child=''
-            if ln[:11]=='# THRESHOLD':
-                read='thr'
-            if ln[:12]=='# TOP SCORES':
-                read='tsc'
-            if ln[:15]=='# MINIMUM SCORE':
-                read='msc'
-            if not ln or ln[0]=='#' or ln[:13]=='Instructions:':
+        dbl.rename(fname)
+    if args.new or not dbl.check_file(fname,False):
+        select_conf(fname,args)
+        return
+    format=dbl.check_plot_format(args.file_format)
+    f=open(fname,'r')
+    read=''
+    combi=[]
+    thr=-1
+    tsc=0
+    msc=0
+    print()
+    for line in f:
+        ln=line.strip()
+        if ln[:8]=='# PARENT':
+            read='parent'
+            pre=''
+            path=''
+            parent=''
+            child=''
+        if ln[:11]=='# THRESHOLD':
+            read='thr'
+        if ln[:12]=='# TOP SCORES':
+            read='tsc'
+        if ln[:15]=='# MINIMUM SCORE':
+            read='msc'
+        if not ln or ln[0]=='#' or ln[:13]=='Instructions:':
+            continue
+        if read=='parent':
+            if not pre:
+                pre=ln
                 continue
-            if read=='parent':
-                if not pre:
-                    pre=ln
-                    continue
-                if not path:
-                    path=ln
-                    continue
-                if not parent:
-                    parent=ln.split()
-                    continue
-                if not child:
-                    child=ln.split()
-                combi.append((pre,path,parent,child))
-                pre=''
-                path=''
-                parent=''
-                child=''
+            if not path:
+                path=ln
                 continue
-            if read=='thr':
-                if thr>0:
-                    print('  A single threshold value should be entered in the THRESHOLD section!\n')
-                    sys.exit()
-                if not ln.replace('.','').replace('-','').isdigit() or (not 0<=float(ln)<100 and ln!='-1' ):
-                    print('  A number between -1 and 100 should be entered in the THRESHOLD section!\n')
-                    sys.exit()
-                if ln=='-1':
-                    thr=int(ln)
-                else:
-                    thr=float(ln)
-            if read=='tsc':
-                if tsc:
-                    print('  A single value should be entered in the TOP SCORES section!\n')
-                    sys.exit()
-                if not ln.isdigit():
-                    print('  An integer value should be entered in the TOP SCORES section!\n')
-                    sys.exit()
-                tsc=int(ln)
-            elif read=='msc':
-                if msc:
-                    print('  A single minimum score value should be entered in the MINIMUM SCORE section!\n')
-                    sys.exit()
-                if not ln.replace('.','').isdigit():
-                    print('  A number >=0 should be entered in the MINIMUM SCORE section!\n')
-                    sys.exit()
-                msc=float(ln)
-        if not combi:
-            print('  Parent/child combinations are missing!n')
-            sys.exit()
-        for pre,path,parent,child in combi:
-            z=''
-            if '\\' in path:
-                z='\\'
-            elif '/' in path:
-                z='/'
-            if z and path[-1]!=z:
-                path+=z
-            if not glob(path+parent[0]+'*'):
-                print('  Wrong path or wrong file name '+path+parent[0]+' !\n')
+            if not parent:
+                parent=ln.split()
+                continue
+            if not child:
+                child=ln.split()
+            combi.append((pre,path,parent,child))
+            pre=''
+            path=''
+            parent=''
+            child=''
+            continue
+        if read=='thr':
+            if thr>0:
+                print('  A single threshold value should be entered in the THRESHOLD section!\n')
                 sys.exit()
-            parent=[parent]
-            if not format:
-                sname='select-'+pre+str(thr)+'_figs.pdf'
-                mppdf=PdfPages(sname)
-            seqs={}
-            for n in range(len(child)):
-                x=glob(child[n]+'*cleaned.txt')
+            if not ln.replace('.','').replace('-','').isdigit() or (not 0<=float(ln)<100 and ln!='-1' ):
+                print('  A number between -1 and 100 should be entered in the THRESHOLD section!\n')
+                sys.exit()
+            if ln=='-1':
+                thr=int(ln)
+            else:
+                thr=float(ln)
+        if read=='tsc':
+            if tsc:
+                print('  A single value should be entered in the TOP SCORES section!\n')
+                sys.exit()
+            if not ln.isdigit():
+                print('  An integer value should be entered in the TOP SCORES section!\n')
+                sys.exit()
+            tsc=int(ln)
+        elif read=='msc':
+            if msc:
+                print('  A single minimum score value should be entered in the MINIMUM SCORE section!\n')
+                sys.exit()
+            if not ln.replace('.','').isdigit():
+                print('  A number >=0 should be entered in the MINIMUM SCORE section!\n')
+                sys.exit()
+            msc=float(ln)
+    if not combi:
+        print('  Parent/child combinations are missing!\n')
+        sys.exit()
+    for pre,path,parent,child in combi:
+        z=''
+        if '\\' in path:
+            z='\\'
+        elif '/' in path:
+            z='/'
+        if z and path[-1]!=z:
+            path+=z
+        if not glob(path+parent[0]+'*'):
+            print('  Wrong path or wrong file name '+path+parent[0]+' !\n')
+            sys.exit()
+        parent=[parent]
+        if not format:
+            sname='select-'+pre+str(thr)+'_figs.pdf'
+            mppdf=PdfPages(sname)
+        seqs={}
+        for n in range(len(child)):
+            x=glob(child[n]+'*cleaned.txt')
+            if not x:
+                x=glob(child[n]+'*.txt')
                 if not x:
-                    x=glob(child[n]+'*.txt')
+                    x=glob(child[n])
                     if not x:
-                        x=glob(child[n])
-                        if not x:
-                            print('  No relevant file found for '+child[n]+'!\n')
-                            sys.exit()
+                        print('  No relevant file found for '+child[n]+'!\n')
+                        sys.exit()
+            if len(x)>1:
+                x=[i for i in x if 'report.txt' not in i]
                 if len(x)>1:
-                    x=[i for i in x if 'report.txt' not in i]
+                    x=[i for i in x if len(i)==max(len(j) for j in x)]
                     if len(x)>1:
-                        x=[i for i in x if len(i)==max(len(j) for j in x)]
+                        x=[i for i in x if ('all' in i or 'All' in i)]
+            if not x or len(x)>1:
+                print('  No unambiguous file search result for '+child[n]+'!\n')
+                sys.exit()
+            x=x[0]
+            y=child[n].replace('_cleaned.txt','')
+            child[n]=(y,x)
+        x=[(n[0][:max(n[0].rfind('_'),len(n[0]))],n[1]) for n in child]
+        if len(set(k for k,_ in x))==len(x):
+            child=list(x)
+        for i in range(len(child)):
+            g=open(child[i][1],'r')
+            N=int(g.readline().strip())
+            for ln in g:
+                l=ln.strip().split()
+                x=int(l[1])/N*100
+                if (thr>-1 and x<thr) or (thr==-1 and int(l[1])==1):
+                    break
+                if l[0] not in seqs:
+                    seqs[l[0]]=[0]*len(child)
+                seqs[l[0]][i]=x
+            g.close()
+        if not seqs:
+            print('  No sequence found. Please decrease the threshold!\n')
+            sys.exit()
+        x=int(math.log10(len(seqs)))+1
+        y=sorted(seqs,key=lambda k:max(seqs[k]),reverse=True)
+        sn={}
+        i=0
+        for n in y:
+            i+=1
+            a=str(i)
+            sn[pre+'0'*(x-len(a))+a]=n
+        fname='select-'+pre+str(thr)+'_sequences.fasta'
+        f=open(fname,'w')
+        f.write('\n'.join('>'+x+'\n'+sn[x] for x in sn)+'\n')
+        f.close()
+        print('  Selected sequences were saved into file: '+fname+'\n')
+        vrlist,links,number,pp,lt=readinit('extract')
+        if lt!='undefined' and not vrlist:
+            print('  List of variable regions not found in caplib3.conf !\n')
+            sys.exit()
+        vrdic={}
+        for n in vrlist:
+            vrdic[n[0]]=n[1:]
+        vrs=[]
+        for n in links:
+            if n[1]==child[0][0]:
+                vrs=[[x] for x in n[-1]]
+                break
+        if not vrs:
+            vrs=[[n[0]] for n in vrlist]
+        for i in range(len(vrs)):
+            vrs[i].append(vrdic[vrs[i][0]][0]//3+number)
+            vrs[i].append(vrdic[vrs[i][0]][4])
+        k=child[0][1]
+        Y=k[k[:k.rfind('_')].rfind('_')+1:k.rfind('_')].split('-')
+        if lt!='undefined':
+            seqformat(fname,pp,[k for k in vrs if k[0] in Y])
+        fname='select-'+pre+str(thr)+'_frequencies.csv'
+        f=open(fname,'w')
+        f.write(','+','.join([n[0] for n in child])+'\n')
+        f.write('\n'.join([n+','+','.join([str(m) for m in seqs[sn[n]]]) for n in sorted(sn)]))
+        f.write('\nOther,'+','.join([str(100-sum([seqs[n][i] for n in seqs])) for i in range(len(child))])+'\n')
+        f.close()
+        print('  Frequencies of selected sequences were saved into file: '+fname+'\n')
+        ratio=[1]
+        if dbl.check_file(path+'caplib3_mix.txt',False):
+            input,x,output=readmix(path)
+            if len(parent[0])==1 and parent[0][0]==output:
+                parent=list(input)
+                ratio=x
+        for n in range(len(parent)):
+            for m in range(len(parent[n])):
+                x=glob(path+parent[n][m]+'*')
+                if len(x)>1:
+                    x=glob(path+parent[n][m]+'*.txt')
+                    if len(x)>1:
+                        x=glob(path+parent[n][m]+'*_cleaned.txt')
                         if len(x)>1:
-                            x=[i for i in x if ('all' in i or 'All' in i)]
+                            x=[i for i in x if len(i)==max(len(j) for j in x)]
+                            if len(x)>1:
+                                x=[i for i in x if ('all' in i or 'All' in i)]
                 if not x or len(x)>1:
-                    print('  No unambiguous file search result for '+child[n]+'!\n')
+                    print('  Parent '+parent[n][m]+' not found or ambiguous search result!\n')
                     sys.exit()
                 x=x[0]
-                y=child[n].replace('_cleaned.txt','')
-                child[n]=(y,x)
-            x=[(n[0][:max(n[0].rfind('_'),len(n[0]))],n[1]) for n in child]
-            if len(set(k for k,_ in x))==len(x):
-                child=list(x)
-            for i in range(len(child)):
-                g=open(child[i][1],'r')
-                N=int(g.readline().strip())
-                for ln in g:
-                    l=ln.strip().split()
-                    x=int(l[1])/N*100
-                    if (thr>-1 and x<thr) or (thr==-1 and int(l[1])==1):
+                parent[n][m]=x
+        parts=[[set(k[k[:k.rfind('_')].rfind('_')+1:k.rfind('_')].split('-')) for k in l] for l in parent]
+        X=[]
+        [X.append(k) for m in parts for l in m for k in l if k not in X]
+        if all(k in X for k in Y):
+            V=set(list((Y)))
+        elif X!=Y and all(k in Y for k in X):
+            print("  Warning! Some variable regions of child sequences don't exist in parent sequences. Enrichment scores can only be calculated for shared regions.\n")
+            V=set([k for k in Y if k in X])
+        elif lt!='undefined':
+            print('  Variable regions of parent and child sequences do not match!\n')
+            sys.exit()
+
+
+
+
+
+########################################  CHANGE !!!!!!!!!!!!!!!!!!!!!
+
+        if lt=='undefined':
+            V=set(['BL2'])
+#############################################################
+
+
+        P=[]
+        temp=[k&V for n in parts for k in n if len(k&V)>1]
+        temp.sort(key=len,reverse=True)
+        for n in temp:
+            p2=[n]
+            while p2:
+                p2.sort(key=len)
+                p=p2[-1]
+                p2.remove(p)
+                for x in P:
+                    if p<=x:
                         break
-                    if l[0] not in seqs:
-                        seqs[l[0]]=[0]*len(child)
-                    seqs[l[0]][i]=x
-                g.close()
-            if not seqs:
-                print('  No sequence found. Please decrease the threshold!\n')
-                sys.exit()
-            x=int(math.log10(len(seqs)))+1
-            y=sorted(seqs,key=lambda k:max(seqs[k]),reverse=True)
-            sn={}
-            i=0
-            for n in y:
-                i+=1
-                a=str(i)
-                sn[pre+'0'*(x-len(a))+a]=n
-            fname='select-'+pre+str(thr)+'_sequences.fasta'
-            f=open(fname,'w')
-            f.write('\n'.join('>'+x+'\n'+sn[x] for x in sn)+'\n')
-            f.close()
-            print('  Selected sequences were saved into file: '+fname+'\n')
-            vrlist,links,number,pp,lt=readinit('extract')
-            if lt!='undefined' and not vrlist:
-                print('  List of variable regions not found in caplib3.conf !\n')
-                sys.exit()
-            vrdic={}
-            for n in vrlist:
-                vrdic[n[0]]=n[1:]
-            vrs=[]
-            for n in links:
-                if n[1]==child[0][0]:
-                    vrs=[[x] for x in n[-1]]
+                if P and x and p<=x:
+                    continue
+                for m in parts:
+                    c=0
+                    t=[]
+                    for l in m:
+                        if p<=l:
+                            break
+                        l1=l&p
+                        if l1 and l1<p:
+                            c+=1
+                            t.append(l1)
+                    if c<2 or p<=l:
+                        continue
+                    left=p-set([k for k1 in t for k in k1])
+                    if not left:
+                        [p2.append(k) for k in t if len(k)>1]
+                    else:
+                        [p2.append(k|left) for k in t]
                     break
-            if not vrs:
-                vrs=[[n[0]] for n in vrlist]
-            for i in range(len(vrs)):
-                vrs[i].append(vrdic[vrs[i][0]][0]//3+number)
-                vrs[i].append(vrdic[vrs[i][0]][4])
-            k=child[0][1]
-            Y=k[k[:k.rfind('_')].rfind('_')+1:k.rfind('_')].split('-')
-            if lt!='undefined':
-                seqformat(fname,pp,[k for k in vrs if k[0] in Y])
-            fname='select-'+pre+str(thr)+'_frequencies.csv'
-            f=open(fname,'w')
-            f.write(','+','.join([n[0] for n in child])+'\n')
-            f.write('\n'.join([n+','+','.join([str(m) for m in seqs[sn[n]]]) for n in sorted(sn)]))
-            f.write('\nOther,'+','.join([str(100-sum([seqs[n][i] for n in seqs])) for i in range(len(child))])+'\n')
-            f.close()
-            print('  Frequencies of selected sequences were saved into file: '+fname+'\n')
-            ratio=[1]
-            if dbl.check_file(path+'caplib3_mix.txt',False):
-                input,x,output=readmix(path)
-                if len(parent[0])==1 and parent[0][0]==output:
-                    parent=list(input)
-                    ratio=x
-            for n in range(len(parent)):
-                for m in range(len(parent[n])):
-                    x=glob(path+parent[n][m]+'*')
-                    if len(x)>1:
-                        x=glob(path+parent[n][m]+'*.txt')
-                        if len(x)>1:
-                            x=glob(path+parent[n][m]+'*_cleaned.txt')
-                            if len(x)>1:
-                                x=[i for i in x if len(i)==max(len(j) for j in x)]
-                                if len(x)>1:
-                                    x=[i for i in x if ('all' in i or 'All' in i)]
-                    if not x or len(x)>1:
-                        print('  Parent '+parent[n][m]+' not found or ambiguous search result!\n')
-                        sys.exit()
-                    x=x[0]
-                    parent[n][m]=x
-            parts=[[set(k[k[:k.rfind('_')].rfind('_')+1:k.rfind('_')].split('-')) for k in l] for l in parent]
-            X=[]
-            [X.append(k) for m in parts for l in m for k in l if k not in X]
-            if all(k in X for k in Y):
-                V=set(list((Y)))
-            elif X!=Y and all(k in Y for k in X):
-                print("  Warning! Some variable regions of child sequences don't exist in parent sequences. Enrichment scores can only be calculated for shared regions.\n")
-                V=set([k for k in Y if k in X])
-            elif lt!='undefined':
-                print('  Variable regions of parent and child sequences do not match!\n')
-                sys.exit()
-
-
-
-
-
-    ########################################  CHANGE !!!!!!!!!!!!!!!!!!!!!
-
-            if lt=='undefined':
-                V=set(['BL2'])
-    #############################################################
-
-
-            P=[]
-            temp=[k&V for n in parts for k in n if len(k&V)>1]
-            temp.sort(key=len,reverse=True)
-            for n in temp:
-                p2=[n]
-                while p2:
-                    p2.sort(key=len)
-                    p=p2[-1]
-                    p2.remove(p)
+                else:
                     for x in P:
-                        if p<=x:
+                        if x<=p:
+                            P.remove(x)
                             break
-                    if P and x and p<=x:
-                        continue
-                    for m in parts:
-                        c=0
-                        t=[]
-                        for l in m:
-                            if p<=l:
-                                break
-                            l1=l&p
-                            if l1 and l1<p:
-                                c+=1
-                                t.append(l1)
-                        if c<2 or p<=l:
-                            continue
-                        left=p-set([k for k1 in t for k in k1])
-                        if not left:
-                            [p2.append(k) for k in t if len(k)>1]
+                    P.append(p)
+        P+=[set([k]) for k in V if k not in [x for y in P for x in y]]
+        for n in sn:
+            sn[n]=sn[n].split(',')
+        plots=1
+        if len(P)==1 and len(P[0])==1:
+            plots-=1
+        if glob('*aae.csv'):
+            plots+=1
+        plot=1
+        Sscore={}
+        Vscore={}
+        Ascore={}
+        if (P and max([len(k) for k in P])>1) or len(P)<2:
+            plots+=1
+            cfreq=[{tuple(s[Y.index(m)] for m in [k for k in Y if k in n]):[] for s in sn.values()} for n in P]
+            for n in child:
+                for i in range(len(P)):
+                    dic,total=f2dl(n[1],Y,[k for k in Y if k in P[i]])
+                    for s in cfreq[i]:
+                        cfreq[i][s].append(dic[s]/total)
+            pfreq=[{tuple(s[Y.index(m)] for m in [k for k in Y if k in n]):[] for s in sn.values()} for n in P]
+            for i in range(len(parent)):
+                for p in range(len(P)):
+                    fl=[]
+                    wl=[k for k in Y if k in P[p]]
+                    wl2=[k[2] for k in vrs if k[0] in wl]
+                    total=1
+                    for j in range(len(parent[i])):
+                        for n in parts[i][j]:
+                            if n in P[p]:
+                                wl.remove(n)
+                                fl.append(n)
+                        if fl:
+                            A=[k for k in Y if k in parts[i][j]]
+                            B=[k for k in Y if k in fl]
+                            dic,total=f2dl(parent[i][j],A,B)
+                            break
+                    I=[A.index(m) for m in B]
+                    for s in pfreq[p]:
+                        if wl and len([k for k in wl2 if k in s])<len(wl):
+                            q=0
+                        elif not fl and tuple(wl2)==s:
+                            q=1
                         else:
-                            [p2.append(k|left) for k in t]
-                        break
-                    else:
-                        for x in P:
-                            if x<=p:
-                                P.remove(x)
-                                break
-                        P.append(p)
-            P+=[set([k]) for k in V if k not in [x for y in P for x in y]]
-            for n in sn:
-                sn[n]=sn[n].split(',')
-            plots=1
-            if len(P)==1 and len(P[0])==1:
-                plots-=1
-            if glob('*aae.csv'):
-                plots+=1
-            plot=1
-            Sscore={}
-            Vscore={}
-            Ascore={}
-            if (P and max([len(k) for k in P])>1) or len(P)<2:
-                plots+=1
-                cfreq=[{tuple(s[Y.index(m)] for m in [k for k in Y if k in n]):[] for s in sn.values()} for n in P]
-                for n in child:
-                    for i in range(len(P)):
-                        dic,total=f2dl(n[1],Y,[k for k in Y if k in P[i]])
-                        for s in cfreq[i]:
-                            cfreq[i][s].append(dic[s]/total)
-                pfreq=[{tuple(s[Y.index(m)] for m in [k for k in Y if k in n]):[] for s in sn.values()} for n in P]
-                for i in range(len(parent)):
-                    for p in range(len(P)):
-                        fl=[]
-                        wl=[k for k in Y if k in P[p]]
-                        wl2=[k[2] for k in vrs if k[0] in wl]
-                        total=1
-                        for j in range(len(parent[i])):
-                            for n in parts[i][j]:
-                                if n in P[p]:
-                                    wl.remove(n)
-                                    fl.append(n)
-                            if fl:
-                                A=[k for k in Y if k in parts[i][j]]
-                                B=[k for k in Y if k in fl]
-                                dic,total=f2dl(parent[i][j],A,B)
-                                break
-                        I=[A.index(m) for m in B]
-                        for s in pfreq[p]:
-                            if wl and len([k for k in wl2 if k in s])<len(wl):
-                                q=0
-                            elif not fl and tuple(wl2)==s:
-                                q=1
-                            else:
-                                z=tuple(s[k] for k in I)
-                                q=max(0.5,dic[z])
-                            pfreq[p][s].append(q/total)
-                for n in sorted(sn):
-                    Sscore[n]=[]
-                    for i in range(len(child)):
-                        q=1
-                        for j in range(len(P)):
-                            s=tuple(sn[n][k] for k in [Y.index(x) for x in Y if x in P[j]])
-                            q*=max(0.1,cfreq[j][s][i]/sum([ratio[k]*(pfreq[j][s][k]) for k in range(len(ratio))]))
-                        Sscore[n].append(math.log10(q)/len(P))
-                fname='select-'+pre+str(thr)+'_ses.csv'
-                f=open(fname,'w')
-                f.write(','+','.join(n[0] for n in child)+'\n')
-                f.write('\n'.join([n+','+','.join([str(m) for m in Sscore[n]]) for n in sorted(Sscore)]))
-                f.close()
-                print('  Sequence enrichment scores were saved into file: '+fname+'\n')
-                fig=plt.figure(figsize=(12,6.75))
-                heatmap(fig,plots,plot,'Sequence enrichment',[Sscore[n] for n in sorted(Sscore)],[n[0] for n in child],sorted(sn))
-                plot+=1
-            if lt!='undefined' and (len(P)!=1 or len(P[0])!=1):
-                V=[k for k in Y if k in V]
-                cfreq=[{s[Y.index(m)]:[] for s in sn.values()} for m in V]
-                for vr in V:
-                    for c in child:
-                        dic,total=f2dl(c[0]+'_'+vr+'_cleaned.txt','','')
-                        for s in cfreq[V.index(vr)]:
-                            a=0
-                            if s in dic:
-                                a=dic[s]
-                            cfreq[V.index(vr)][s].append(a/total)
-                pfreq=[{s[Y.index(m)]:[] for s in sn.values()} for m in V]
-                for i in range(len(parent)):
-                    P=[k for k in V for m in parts[i] for n in m if k in n]
-                    for vr in V:
-                        if vr in P:
-                            x=parent[i][parts[i].index([k for k in parts[i] if vr in k][0])]
-                            x=x[:x.rfind('_')][:x[:x.rfind('_')].rfind('_')]
-                            dic,total=f2dl(x+'_'+vr+'_cleaned.txt','','')
-                        else:
-                            dic,total={[k[2] for k in vrs if k[0]==vr][0]:1},1
-                        for s in pfreq[V.index(vr)]:
-                            a=0
-                            if vr in P:
-                                a=0.5
-                            if s in dic:
-                                a=dic[s]
-                            pfreq[V.index(vr)][s].append(a/total)
-                E=[{} for n in V]
-                for n in sorted(sn):
-                    Vscore[n]=[]
-                    for i in range(len(child)):
-                        q=1
-                        for j in range(len(V)):
-                            s=sn[n][Y.index(V[j])]
-                            h=max(0.1,cfreq[j][s][i]/sum([ratio[k]*(pfreq[j][s][k]) for k in range(len(ratio))]))
-                            if s not in E[j]:
-                                E[j][s]=[0]*len(child)
-                            if not E[j][s][i]:
-                                E[j][s][i]=h
-                            q*=h
-                        Vscore[n].append(math.log10(q)/len(V))
-                fname='select-'+pre+str(thr)+'_vres.csv'
-                f=open(fname,'w')
-                f.write(','+','.join(n[0] for n in child)+'\n')
-                f.write('\n'.join([n+','+','.join([str(m) for m in Vscore[n]]) for n in sorted(Vscore)]))
-                f.close()
-                print('  Variable region enrichment scores were saved into file: '+fname+'\n')
-                heatmap(fig,plots,plot,'VR enrichment',[Vscore[n] for n in sorted(Vscore)],[n[0] for n in child],sorted(sn))
-                plot+=1
-            aae=[]
-            aaef=glob('*aae.csv')
-            if aaef:
-                for n in child:
-                    x=[k for k in aaef if (n[0]+'_aae.csv' in k)]
-                    if len(x)!=1:
-                        print('  Warning! amino acid enrichment file could not be found for '+n[0]+' !\n')
-                        continue
-                    aae.append({})
-                    f=open(x[0],'r')
-                    for m in f:
-                        if m[0]==',':
-                            continue
-                        m=m.strip().split(',')
-                        aae[-1][m[0]]=m[1:]
-                if not aae:
-                    return
-                b=findvp(V,vrdic)
-                for n in sorted(sn):
-                    Ascore[n]=[0]*len(child)
-                    x=sn[n]
-                    for i in range(len(x)):
-                        ind=[k for k in range(len(vrs)) if Y[i] in vrs[k]][0]
-                        for j in range(len(x[i])):
-                            q=str(vrs[ind][1]+j)
-                            for k in range(len(aae)):
-                                if q in aae[k]:
-                                    Ascore[n][k]+=float(aae[k][q][aa.index(x[i][j])])/b
-                fname='select-'+pre+str(thr)+'_aaes.csv'
-                f=open(fname,'w')
-                f.write(','+','.join(n[0] for n in child)+'\n')
-                f.write('\n'.join([n+','+','.join([str(m) for m in Ascore[n]]) for n in sorted(Ascore)]))
-                f.close()
-                print('  Amino acid enrichment scores were saved into file: '+fname+'\n')
-                heatmap(fig,plots,plot,'Amino acid enrichment',[Ascore[n] for n in sorted(Ascore)],[n[0] for n in child],sorted(sn))
-            fig.tight_layout()
-            if format:
-                g='select_fig-ES_'+pre+str(thr)+'.'+format
-                plt.savefig(g,dpi=600)
-                print('  Figure was saved into file: '+g+'\n')
-            else:
-                mppdf.savefig()
-            plt.close()
-            aaselec=[]
-            for j in range(len(Y)):
-                a=[sn[k][j] for k in sn]
-                aaselec.append([])
-                ind=[k for k in range(len(vrs)) if Y[j] in vrs[k]][0]
-                for k in range(len(vrs[ind][2])):
-                    aaselec[-1].append(set([l[k] for l in a if len(l)>k]))
-            f=open('select-'+pre+str(thr)+'_top_scores.html','w')
-            f.write('<html>\n<head></head>\n<body><p><pre>\n')
-            if '.' in pp:
-                pp=pp[:max(0,pp.rfind('-'))]
-            Cscore={}
+                            z=tuple(s[k] for k in I)
+                            q=max(0.5,dic[z])
+                        pfreq[p][s].append(q/total)
             for n in sorted(sn):
-                Cscore[n]=[]
+                Sscore[n]=[]
                 for i in range(len(child)):
-                    x=0
-                    if Sscore:
-                        x+=Sscore[n][i]
-                    if Vscore:
-                        x+=Vscore[n][i]
-                    if Ascore:
-                        x+=Ascore[n][i]
-                    Cscore[n].append(x)
-            Opt_seq=[]
-            Opt_score=[]
-            for i in range(len(child)):
-                Opt_seq.append({})
-                Opt_score.append({})
-                if Vscore:
                     q=1
-                    l=''
-                    for n in E:
-                        a=list(n.keys())
-                        b=[c[i] for c in list(n.values())]
-                        k=a[b.index(max(b))]
-                        q*=n[k][i]
-                        l+=k+','
-                    l=l[:-1]
-                    q=math.log10(q)/len(V)
-                    Opt_seq[-1]['Opt-VR']=l
-                    Opt_score[-1]['Opt-VR']=[]
-                    k=0
-                    l=l.split(',')
-                    if l in sn.values() and Sscore:
-                        x=[n for n,m in sn.items() if m==l][0]
-                        k=Sscore[x][i]
-                    if Sscore:
-                        Opt_score[-1]['Opt-VR'].append(k)
-                    Opt_score[-1]['Opt-VR'].append(q)
-                    r=0
-                    if Ascore:
-                        vp=findvp(V,vrdic)
-                        for a in range(len(l)):
-                            ind=[k for k in range(len(vrs)) if Y[a] in vrs[k]][0]
-                            for b in range(len(l[a])):
-                                p=str(vrs[ind][1]+b)
-                                if p in aae[i]:
-                                    r+=float(aae[i][p][aa.index(l[a][b])])/vp
-                        Opt_score[-1]['Opt-VR'].append(r)
-                if Ascore:
-                    l=''
-                    q=0
-                    vp=findvp(V,vrdic)
-                    for v in range(len(Y)):
-                        ind=[k for k in range(len(vrs)) if Y[v] in vrs[k]][0]
-                        for j in range(len(vrs[ind][2])):
-                            a=str(j+vrs[ind][1])
-                            if a in aae[i]:
-                                b=sorted([float(k) for k in aae[i][a]],reverse=True)
-                                for n in range(20):
-                                    c=aa[[float(k) for k in aae[i][a]].index(b[n])]
-                                    if c in aaselec[v][j]:
-                                        l+=c
-                                        q+=b[n]/vp
-                                        break
-                            else:
-                                l+=vrs[ind][2][j]
-                        l+=','
-                    l=l[:-1]
-                    Opt_seq[-1]['Opt-aa']=l
-                    Opt_score[-1]['Opt-aa']=[]
-                    k=0
-                    l=l.split(',')
-                    if l in sn.values() and Sscore:
-                        x=[n for n,m in sn.items() if m==l][0]
-                        k=Sscore[x][i]
-                    if Sscore:
-                        Opt_score[-1]['Opt-aa'].append(k)
-                    if Vscore:
-                        r=1
-                        for a in range(len(l)):
-                            if l[a] in E[a]:
-                                r*=E[a][l[a]][i]
-                        r=math.log10(r)/len(V)
-                        Opt_score[-1]['Opt-aa'].append(r)
-                    Opt_score[-1]['Opt-aa'].append(q)
-            for i in range(len(child)):
-                A=max(len(pp),max(len(k) for k in sn),6)+2
-                map=[(0.001,'#e60000'),(0.01,'#ff6666'),(0.1,'#ffb3b3'),(0.8,'#ffe6e6'),(2,'#ffffff'),(10,'#e6e6ff'),(100,'#b3b3ff'),(1000,'#6666ff'),'#0000e6']
-                f.write('\n</pre><font face = "Sans-serif" size = "5"><b>'+child[i][0]+'</b></font><pre>\n')
-                f.write(' '*(A+1))
-                b=[]
-                for k in range(len(Y)):
-                    ind=[z for z in range(len(vrs)) if Y[k] in vrs[z]][0]
-                    b.append(max(len(vrs[ind][0]),len(str(vrs[ind][1])),len(vrs[ind][2])))
-                    f.write(' <b>'+vrs[ind][0]+' </b>'*(b[k]-len(vrs[ind][0])))
-                f.write('\n'+' '*(A+1))
-                for k in range(len(Y)):
-                    ind=[z for z in range(len(vrs)) if Y[k] in vrs[z]][0]
-                    f.write(' '+str(vrs[ind][1])+' '*(b[k]-len(str(vrs[ind][1]))))
-                f.write('\n'+' '*(A-len(pp))+pp+' ')
-                for k in range(len(Y)):
-                    ind=[z for z in range(len(vrs)) if Y[k] in vrs[z]][0]
-                    a=vrs[ind][2]
-                    for j in range(len(a)):
-                        c=str(j+vrs[ind][1])
-                        if Ascore and c in aae[i]:
-                            r=float(aae[i][c][aa.index(vrs[ind][2][j])])
-                            if r>=1:
-                                a='<u><b>'+a+'</b></u>'
-                            elif r>=0.1:
-                                a='<u>'+a+'</u>'
-                    if Vscore and vrs[ind][2] in E[k]:
-                            c=cmap(E[k][vrs[ind][2]][i],map)
-                            a='<span style="background-color: '+c+'">'+a+'</span>'
-                    f.write(' '+a+' '*(b[k]-len(vrs[ind][2])))
-                x=''
-                y=''
-                z=''
-                if Sscore:
-                    x='S-score'
-                if Vscore:
-                    y=' V-score'
-                if Ascore:
-                    z=' A-score'
-                f.write(' <b>  %    '+x+y+z+'   Total')
-                x=[child[j][0] for j in range(len(child)) if j!=i]
-                if len(x)>1:
-                    while True:
-                        if len(set([k[0] for k in x]))!=1 or len([k for k in x if len(k)==1]):
-                            break
-                        x=[k[1:] for k in x]
-                z=5
-                if x:
-                    z=max(5,max([len(k) for k in x]))
-                x=''.join([' '*(1+z-len(k))+k for k in x])
-                f.write(' '+x+'</b>\n')
-                temp=sorted([k for k in Cscore if Cscore[k][i]>=msc],key=lambda x:Cscore[x][i],reverse=True)[:tsc]+[k for k in Opt_score[i]]
-                for n in temp:
-                    if n[:4]=='Opt-':
-                        l=' '*(A-len(n))+'<em>'+n+'</em> '
-                        s=Opt_seq[i][n].split(',')
-                    else:
-                        l=' '*(A-len(n))+n+' '
-                        s=sn[n]
-                    for k in range(len(Y)):
-                        ind=[z for z in range(len(vrs)) if Y[k] in vrs[z]][0]
-                        m=' '
-                        for j in range(len(vrs[ind][2])):
-                            if j>=len(s[k]):
-                                m+='-'
-                            elif s[k][j]==vrs[ind][2][j]:
-                                m+='.'
-                            else:
-                                c=s[k][j]
-                                a=str(j+vrs[ind][1])
-                                if Ascore and a in aae[i]:
-                                    r=float(aae[i][a][aa.index(s[k][j])])
-                                    if r>=1:
-                                        c='<u><b>'+c+'</b></u>'
-                                    elif r>=0.1:
-                                        c='<u>'+c+'</u>'
-                                m+=c
-                        if Vscore and s[k] in E[k]:
-                            c=cmap(E[k][s[k]][i],map)
-                            m=' <span style="background-color: '+c+'">'+m[1:]+'</span>'
-                        l+=m+' '*(b[k]-len(vrs[ind][2]))
-                    if n[:4]=='Opt-':
-                        y='      <em>'
-                        z='</em>'
-                        x=Opt_score[i][n]
-                    else:
-                        z=''
-                        y="{0:6.2f}".format(seqs[','.join(sn[n])][i])
-                        x=[]
-                        if Sscore:
-                            x.append(Sscore[n][i])
-                        if Vscore:
-                            x.append(Vscore[n][i])
-                        if Ascore:
-                            x.append(Ascore[n][i])
-                        x.append(Cscore[n][i])
-                    x=''.join(["{0:8.2f}".format(k) for k in x])
-                    if n[:4]=='Opt-':
-                        w=''
-                    else:
-                        w=[Cscore[n][j] for j in range(len(child)) if j!=i]
-                        c=''
-                        if w:
-                            c=cmap(Cscore[n][i]/max(0.001,max(w)),[(2,'#ffffff'),(5,'#e6ffe6'),(10,'#99ff99'),'#00e600'])
-                        w=' <span style="background-color: '+c+'">'+''.join(["{0:6.2f}".format(k) for k in w])+'</span>'
-                    f.write(l+' '+y+x+z+w+'\n')
-            f.write('<br><br></pre></p></body></html>\n\n')
+                    for j in range(len(P)):
+                        s=tuple(sn[n][k] for k in [Y.index(x) for x in Y if x in P[j]])
+                        q*=max(0.1,cfreq[j][s][i]/sum([ratio[k]*(pfreq[j][s][k]) for k in range(len(ratio))]))
+                    Sscore[n].append(math.log10(q)/len(P))
+            fname='select-'+pre+str(thr)+'_ses.csv'
+            f=open(fname,'w')
+            f.write(','+','.join(n[0] for n in child)+'\n')
+            f.write('\n'.join([n+','+','.join([str(m) for m in Sscore[n]]) for n in sorted(Sscore)]))
             f.close()
-            print('  Sequences with top enrichment scores were saved into file: select-'+pre+str(thr)+'_top_scores.html'+'\n')
-            Gscores=[]
+            print('  Sequence enrichment scores were saved into file: '+fname+'\n')
+            fig=plt.figure(figsize=(12,6.75))
+            heatmap(fig,plots,plot,'Sequence enrichment',[Sscore[n] for n in sorted(Sscore)],[n[0] for n in child],sorted(sn))
+            plot+=1
+        if lt!='undefined' and (len(P)!=1 or len(P[0])!=1):
+            V=[k for k in Y if k in V]
+            cfreq=[{s[Y.index(m)]:[] for s in sn.values()} for m in V]
+            for vr in V:
+                for c in child:
+                    dic,total=f2dl(c[0]+'_'+vr+'_cleaned.txt','','')
+                    for s in cfreq[V.index(vr)]:
+                        a=0
+                        if s in dic:
+                            a=dic[s]
+                        cfreq[V.index(vr)][s].append(a/total)
+            pfreq=[{s[Y.index(m)]:[] for s in sn.values()} for m in V]
+            for i in range(len(parent)):
+                P=[k for k in V for m in parts[i] for n in m if k in n]
+                for vr in V:
+                    if vr in P:
+                        x=parent[i][parts[i].index([k for k in parts[i] if vr in k][0])]
+                        x=x[:x.rfind('_')][:x[:x.rfind('_')].rfind('_')]
+                        dic,total=f2dl(x+'_'+vr+'_cleaned.txt','','')
+                    else:
+                        dic,total={[k[2] for k in vrs if k[0]==vr][0]:1},1
+                    for s in pfreq[V.index(vr)]:
+                        a=0
+                        if vr in P:
+                            a=0.5
+                        if s in dic:
+                            a=dic[s]
+                        pfreq[V.index(vr)][s].append(a/total)
+            E=[{} for n in V]
+            for n in sorted(sn):
+                Vscore[n]=[]
+                for i in range(len(child)):
+                    q=1
+                    for j in range(len(V)):
+                        s=sn[n][Y.index(V[j])]
+                        h=max(0.1,cfreq[j][s][i]/sum([ratio[k]*(pfreq[j][s][k]) for k in range(len(ratio))]))
+                        if s not in E[j]:
+                            E[j][s]=[0]*len(child)
+                        if not E[j][s][i]:
+                            E[j][s][i]=h
+                        q*=h
+                    Vscore[n].append(math.log10(q)/len(V))
+            fname='select-'+pre+str(thr)+'_vres.csv'
+            f=open(fname,'w')
+            f.write(','+','.join(n[0] for n in child)+'\n')
+            f.write('\n'.join([n+','+','.join([str(m) for m in Vscore[n]]) for n in sorted(Vscore)]))
+            f.close()
+            print('  Variable region enrichment scores were saved into file: '+fname+'\n')
+            heatmap(fig,plots,plot,'VR enrichment',[Vscore[n] for n in sorted(Vscore)],[n[0] for n in child],sorted(sn))
+            plot+=1
+        aae=[]
+        aaef=glob('*aae.csv')
+        if aaef:
+            for n in child:
+                x=[k for k in aaef if all([m in k for m in (n[0],'_aae.csv')])]
+                if len(x)!=1:
+                    print('  Warning! Amino acid enrichment file could not be found for '+n[0]+' !\n')
+                    continue
+                aae.append({})
+                f=open(x[0],'r')
+                for m in f:
+                    if m[0]==',':
+                        continue
+                    m=m.strip().split(',')
+                    aae[-1][m[0]]=m[1:]
+            if not aae:
+                return
+            b=findvp(V,vrdic)
+            for n in sorted(sn):
+                Ascore[n]=[0]*len(child)
+                x=sn[n]
+                for i in range(len(x)):
+                    ind=[k for k in range(len(vrs)) if Y[i] in vrs[k]][0]
+                    for j in range(len(x[i])):
+                        q=str(vrs[ind][1]+j)
+                        for k in range(len(aae)):
+                            if q in aae[k]:
+                                Ascore[n][k]+=float(aae[k][q][aa.index(x[i][j])])/b
+            fname='select-'+pre+str(thr)+'_aaes.csv'
+            f=open(fname,'w')
+            f.write(','+','.join(n[0] for n in child)+'\n')
+            f.write('\n'.join([n+','+','.join([str(m) for m in Ascore[n]]) for n in sorted(Ascore)]))
+            f.close()
+            print('  Amino acid enrichment scores were saved into file: '+fname+'\n')
+            heatmap(fig,plots,plot,'Amino acid enrichment',[Ascore[n] for n in sorted(Ascore)],[n[0] for n in child],sorted(sn))
+        fig.tight_layout()
+        if format:
+            g='select_fig-ES_'+pre+str(thr)+'.'+format
+            plt.savefig(g,dpi=600)
+            print('  Figure was saved into file: '+g+'\n')
+        else:
+            mppdf.savefig()
+        plt.close()
+        aaselec=[]
+        for j in range(len(Y)):
+            a=[sn[k][j] for k in sn]
+            aaselec.append([])
+            ind=[k for k in range(len(vrs)) if Y[j] in vrs[k]][0]
+            for k in range(len(vrs[ind][2])):
+                aaselec[-1].append(set([l[k] for l in a if len(l)>k]))
+        f=open('select-'+pre+str(thr)+'_top_scores.html','w')
+        f.write('<html>\n<head></head>\n<body><p><pre>\n')
+        if '.' in pp:
+            pp=pp[:max(0,pp.rfind('-'))]
+        Cscore={}
+        for n in sorted(sn):
+            Cscore[n]=[]
             for i in range(len(child)):
-                Gscores.append([])
-                x=[Cscore[k][i] for k in Cscore if Cscore[k][i]>=msc]
-                total=sum(x)
-                Gscores[-1].append(max(x))
-                Gscores[-1].append(total)
-                matrix=[]
+                x=0
+                if Sscore:
+                    x+=Sscore[n][i]
+                if Vscore:
+                    x+=Vscore[n][i]
+                if Ascore:
+                    x+=Ascore[n][i]
+                Cscore[n].append(x)
+        Opt_seq=[]
+        Opt_score=[]
+        for i in range(len(child)):
+            Opt_seq.append({})
+            Opt_score.append({})
+            if Vscore:
+                q=1
+                l=''
+                for n in E:
+                    a=list(n.keys())
+                    b=[c[i] for c in list(n.values())]
+                    k=a[b.index(max(b))]
+                    q*=n[k][i]
+                    l+=k+','
+                l=l[:-1]
+                q=math.log10(q)/len(V)
+                Opt_seq[-1]['Opt-VR']=l
+                Opt_score[-1]['Opt-VR']=[]
+                k=0
+                l=l.split(',')
+                if l in sn.values() and Sscore:
+                    x=[n for n,m in sn.items() if m==l][0]
+                    k=Sscore[x][i]
+                if Sscore:
+                    Opt_score[-1]['Opt-VR'].append(k)
+                Opt_score[-1]['Opt-VR'].append(q)
+                r=0
+                if Ascore:
+                    vp=findvp(V,vrdic)
+                    for a in range(len(l)):
+                        ind=[k for k in range(len(vrs)) if Y[a] in vrs[k]][0]
+                        for b in range(len(l[a])):
+                            p=str(vrs[ind][1]+b)
+                            if p in aae[i]:
+                                r+=float(aae[i][p][aa.index(l[a][b])])/vp
+                    Opt_score[-1]['Opt-VR'].append(r)
+            if Ascore:
+                l=''
+                q=0
+                vp=findvp(V,vrdic)
+                for v in range(len(Y)):
+                    ind=[k for k in range(len(vrs)) if Y[v] in vrs[k]][0]
+                    for j in range(len(vrs[ind][2])):
+                        a=str(j+vrs[ind][1])
+                        if a in aae[i]:
+                            b=sorted([float(k) for k in aae[i][a]],reverse=True)
+                            for n in range(20):
+                                c=aa[[float(k) for k in aae[i][a]].index(b[n])]
+                                if c in aaselec[v][j]:
+                                    l+=c
+                                    q+=b[n]/vp
+                                    break
+                        else:
+                            l+=vrs[ind][2][j]
+                    l+=','
+                l=l[:-1]
+                Opt_seq[-1]['Opt-aa']=l
+                Opt_score[-1]['Opt-aa']=[]
+                k=0
+                l=l.split(',')
+                if l in sn.values() and Sscore:
+                    x=[n for n,m in sn.items() if m==l][0]
+                    k=Sscore[x][i]
+                if Sscore:
+                    Opt_score[-1]['Opt-aa'].append(k)
+                if Vscore:
+                    r=1
+                    for a in range(len(l)):
+                        if l[a] in E[a]:
+                            r*=E[a][l[a]][i]
+                    r=math.log10(r)/len(V)
+                    Opt_score[-1]['Opt-aa'].append(r)
+                Opt_score[-1]['Opt-aa'].append(q)
+        for i in range(len(child)):
+            A=max(len(pp),max(len(k) for k in sn),6)+2
+            map=[(0.001,'#e60000'),(0.01,'#ff6666'),(0.1,'#ffb3b3'),(0.8,'#ffe6e6'),(2,'#ffffff'),(10,'#e6e6ff'),(100,'#b3b3ff'),(1000,'#6666ff'),'#0000e6']
+            f.write('\n</pre><font face = "Sans-serif" size = "5"><b>'+child[i][0]+'</b></font><pre>\n')
+            f.write(' '*(A+1))
+            b=[]
+            for k in range(len(Y)):
+                ind=[z for z in range(len(vrs)) if Y[k] in vrs[z]][0]
+                b.append(max(len(vrs[ind][0]),len(str(vrs[ind][1])),len(vrs[ind][2])))
+                f.write(' <b>'+vrs[ind][0]+' </b>'*(b[k]-len(vrs[ind][0])))
+            f.write('\n'+' '*(A+1))
+            for k in range(len(Y)):
+                ind=[z for z in range(len(vrs)) if Y[k] in vrs[z]][0]
+                f.write(' '+str(vrs[ind][1])+' '*(b[k]-len(str(vrs[ind][1]))))
+            f.write('\n'+' '*(A-len(pp))+pp+' ')
+            for k in range(len(Y)):
+                ind=[z for z in range(len(vrs)) if Y[k] in vrs[z]][0]
+                a=vrs[ind][2]
+                for j in range(len(a)):
+                    c=str(j+vrs[ind][1])
+                    if Ascore and c in aae[i]:
+                        r=float(aae[i][c][aa.index(vrs[ind][2][j])])
+                        if r>=1:
+                            a='<u><b>'+a+'</b></u>'
+                        elif r>=0.1:
+                            a='<u>'+a+'</u>'
+                if Vscore and vrs[ind][2] in E[k]:
+                        c=cmap(E[k][vrs[ind][2]][i],map)
+                        a='<span style="background-color: '+c+'">'+a+'</span>'
+                f.write(' '+a+' '*(b[k]-len(vrs[ind][2])))
+            x=''
+            y=''
+            z=''
+            if Sscore:
+                x='S-score'
+            if Vscore:
+                y=' V-score'
+            if Ascore:
+                z=' A-score'
+            f.write(' <b>  %    '+x+y+z+'   Total')
+            x=[child[j][0] for j in range(len(child)) if j!=i]
+            if len(x)>1:
+                while True:
+                    if len(set([k[0] for k in x]))!=1 or len([k for k in x if len(k)==1]):
+                        break
+                    x=[k[1:] for k in x]
+            z=5
+            if x:
+                z=max(5,max([len(k) for k in x]))
+            x=''.join([' '*(1+z-len(k))+k for k in x])
+            f.write(' '+x+'</b>\n')
+            temp=sorted([k for k in Cscore if Cscore[k][i]>=msc],key=lambda x:Cscore[x][i],reverse=True)[:tsc]+[k for k in Opt_score[i]]
+            for n in temp:
+                if n[:4]=='Opt-':
+                    l=' '*(A-len(n))+'<em>'+n+'</em> '
+                    s=Opt_seq[i][n].split(',')
+                else:
+                    l=' '*(A-len(n))+n+' '
+                    s=sn[n]
+                for k in range(len(Y)):
+                    ind=[z for z in range(len(vrs)) if Y[k] in vrs[z]][0]
+                    m=' '
+                    for j in range(len(vrs[ind][2])):
+                        if j>=len(s[k]):
+                            m+='-'
+                        elif s[k][j]==vrs[ind][2][j]:
+                            m+='.'
+                        else:
+                            c=s[k][j]
+                            a=str(j+vrs[ind][1])
+                            if Ascore and a in aae[i]:
+                                r=float(aae[i][a][aa.index(s[k][j])])
+                                if r>=1:
+                                    c='<u><b>'+c+'</b></u>'
+                                elif r>=0.1:
+                                    c='<u>'+c+'</u>'
+                            m+=c
+                    if Vscore and s[k] in E[k]:
+                        c=cmap(E[k][s[k]][i],map)
+                        m=' <span style="background-color: '+c+'">'+m[1:]+'</span>'
+                    l+=m+' '*(b[k]-len(vrs[ind][2]))
+                if n[:4]=='Opt-':
+                    y='      <em>'
+                    z='</em>'
+                    x=Opt_score[i][n]
+                else:
+                    z=''
+                    y="{0:6.2f}".format(seqs[','.join(sn[n])][i])
+                    x=[]
+                    if Sscore:
+                        x.append(Sscore[n][i])
+                    if Vscore:
+                        x.append(Vscore[n][i])
+                    if Ascore:
+                        x.append(Ascore[n][i])
+                    x.append(Cscore[n][i])
+                x=''.join(["{0:8.2f}".format(k) for k in x])
+                if n[:4]=='Opt-':
+                    w=''
+                else:
+                    w=[Cscore[n][j] for j in range(len(child)) if j!=i]
+                    c=''
+                    if w:
+                        c=cmap(Cscore[n][i]/max(0.001,max(w)),[(2,'#ffffff'),(5,'#e6ffe6'),(10,'#99ff99'),'#00e600'])
+                    w=' <span style="background-color: '+c+'">'+''.join(["{0:6.2f}".format(k) for k in w])+'</span>'
+                f.write(l+' '+y+x+z+w+'\n')
+        f.write('<br><br></pre></p></body></html>\n\n')
+        f.close()
+        print('  Sequences with top enrichment scores were saved into file: select-'+pre+str(thr)+'_top_scores.html'+'\n')
+        Gscores=[]
+        for i in range(len(child)):
+            Gscores.append([])
+            x=[Cscore[k][i] for k in Cscore if Cscore[k][i]>=msc]
+            total=sum(x)
+            Gscores[-1].append(max(x))
+            Gscores[-1].append(total)
+            matrix=[]
 
 
-    ################# CREATE ALIGNMENT IN CASE OF VARIABLE LENGTHS ! ##############################################################
+################# CREATE ALIGNMENT IN CASE OF VARIABLE LENGTHS ! ##############################################################
 
 
 
 
-                x=[(''.join(sn[k]),Cscore[k][i]) for k in Cscore if Cscore[k][i]>=msc]
-                z=Counter([len(k[0]) for k in x])
-                ln=max(z,key=z.get)
-                for j in range(ln):
-                    matrix.append([])
-                    y=defaultdict(int)
-                    for n in x:
-                        if len(n[0])!=ln:
-                            continue
-                        y[n[0][j]]+=n[1]
-                    for a in aa:
-                        z=0
-                        if a in y:
-                            z=y[a]/total
-                        matrix[-1].append(z)
-                Gscores[-1].append(dbl.entropy(matrix))
-            colors,fig=dbl.plot_start('tab10','Global enrichment')
-            sf=10000/max([k[1] for k in Gscores])
-            plt.scatter(x=[k[0] for k in child],y=[k[0] for k in Gscores],s=[k[1]*sf for k in Gscores],c=[k[2] for k in Gscores],alpha=0.6)
-            plt.ylabel("Max enrichment score")
-            plt.colorbar(label='Enrichment entropy')
-            plt.xticks(rotation=90)
-            c
-            fig.tight_layout()
-            if format:
-                g='global_enrichment_'+pre+str(thr)+'.'+format
-                plt.savefig(g,dpi=600)
-                print('  Figure was saved into file: '+g+'\n')
-            else:
-                mppdf.savefig()
-            plt.close()
-            if not format:
-                mppdf.close()
-                print('  Figures were saved into file: '+sname+'\n')
-        return
-    f=open('caplib3_select.txt','w')
+            x=[(''.join(sn[k]),Cscore[k][i]) for k in Cscore if Cscore[k][i]>=msc]
+            z=Counter([len(k[0]) for k in x])
+            ln=max(z,key=z.get)
+            for j in range(ln):
+                matrix.append([])
+                y=defaultdict(int)
+                for n in x:
+                    if len(n[0])!=ln:
+                        continue
+                    y[n[0][j]]+=n[1]
+                for a in aa:
+                    z=0
+                    if a in y:
+                        z=y[a]/total
+                    matrix[-1].append(z)
+            Gscores[-1].append(dbl.entropy(matrix))
+        colors,fig=dbl.plot_start('tab10',None,'Global enrichment')
+        sf=10000/max([k[1] for k in Gscores])
+        plt.scatter(x=[k[0] for k in child],y=[k[0] for k in Gscores],s=[k[1]*sf for k in Gscores],c=[k[2] for k in Gscores],alpha=0.6)
+        plt.ylabel("Max enrichment score")
+        plt.colorbar(label='Enrichment entropy')
+        plt.xticks(rotation=90)
+        c
+        fig.tight_layout()
+        if format:
+            g='global_enrichment_'+pre+str(thr)+'.'+format
+            plt.savefig(g,dpi=600)
+            print('  Figure was saved into file: '+g+'\n')
+        else:
+            mppdf.savefig()
+        plt.close()
+        if not format:
+            mppdf.close()
+            print('  Figures were saved into file: '+sname+'\n')
+
+
 
 
     #  DETECT POSSIBLE ENTRIES
 # check if caplib3_mix.txt exists, then copy output prefix from it and use it as the parent prefix
 
-
+def select_conf(fname,args):
     x=glob('*_cleaned.txt')
+    if not x:
+        print('\n  No relevant files found in the current directory!\n')
+        sys.exit()
     x=[k[:k.rfind('_')] for k in x]
     if '_' in x[0]:
         x=[k[:k.rfind('_')] for k in x]
@@ -5275,6 +5313,7 @@ def select(args):
             for i in range(len(y)-1):
                 if n+y[i] in x and n+y[i+1] in x:
                     combi.append((n,n+y[i],n+y[i+1]))
+    f=open(fname,'w')
     f.write('# PARENT/CHILD COMBINATIONS\nInstructions: add combinations below, separated by empty lines. Each combination must have 4 lines:\n')
     f.write('  # Sequence prefix: sequences will be named using the sequence prefix followed by a number.\n')
     f.write('  # Path to parent file(s): if parent files are not in the current directory, write the path to access them, otherwise write "./" (child files must be in current directory).\n')
@@ -5287,7 +5326,7 @@ def select(args):
     f.write('# MINIMUM SCORE\nInstructions: sequences with global enrichment score equal or higher to the minimum score will be used in calculations (recommended value: between 0 and 1).\n\n0.1\n\n')
     f.write('##### END OF CONFIGURATION FILE ##### ')
     f.close()
-    print('\n  Edit the file caplib3_select.txt before running caplib3 select again!\n\n')
+    print('\n  Edit the file '+fname+' before running caplib3 select again!\n\n')
 
 def seqformat(fname,pp,vrs):
     if '.' in pp:
