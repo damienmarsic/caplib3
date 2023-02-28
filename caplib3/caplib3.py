@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-__version__='0.6.9'
-last_update='2022-10-21'
+__version__='0.6.10'
+last_update='2023-02-28'
 author='Damien Marsic, damien.marsic@aliyun.com'
 
 import argparse,sys,gzip,math,regex
@@ -1067,16 +1067,12 @@ def demux(args):
     if fail:
         print('\n  Invalid demux file!'+fail+'\n')
         sys.exit()
-
-    print(sd)
-
-
     x=[k[0] for k in sd]+[k[1] for k in sd]
     fp={k:fp[k] for k in fp if fp[k] in x}
-    rp={k:rp[k] for k in rp if rp[k] in x}
-    l=set([len(x) for x in fp]+[len(x) for x in rp])
+    rp={k:rp[k] for k in rp if rp[k] in x}  #  remove primers not used in definitions
+    l=set([len(x) for x in fp]+[len(x) for x in rp])  # primer sizes
     primers={v:k  for k,v in {**fp,**rp}.items()}
-    fps=list(fp.keys())+list(rp.keys())
+    fps=list(fp.keys())+list(rp.keys())  #  all primer sequences
     if len(l)>1:
         for n in (fp,rp):
             A=list(n.keys()).copy()
@@ -1086,11 +1082,14 @@ def demux(args):
                     sys.exit()
                 if len(i)!=min(l):
                     n[i[:min(l)]]=n[i]
-                    del n[i]
+                    del n[i]  #  make all primers the same length (smallest)
+
+######################################################
+
     for i in range(min(10,min(l)),min(l)+1):
         x=[k[:i] for k in (sorted(fp)+sorted(rp))]
         if len(set(x))==len(x):
-            break
+            break               # make primers as short as possible (all seqs are different)
     for j in range(i,min(l)+1):
         if dbl.diff([k[:j] for k in sorted(fp)+sorted(rp)])>2:
             ec=True
@@ -1110,7 +1109,10 @@ def demux(args):
             break
     else:
         cmode=False
-    if cmode:
+    if cmode and ec:
+        fp={dbl.compress(k[:i])[:z]:fp[k] for k in fp}
+        rp={dbl.compress(k[:i])[:z]:rp[k] for k in rp}
+    elif cmode and not ec:
         fp={dbl.compress(k[:i]):fp[k] for k in fp}
         rp={dbl.compress(k[:i]):rp[k] for k in rp}
     else:
@@ -1124,6 +1126,9 @@ def demux(args):
     if cmode:
         x='on'
     print('\n  Compressed mode is '+x)
+
+##############################################
+
     if args.read_file!='auto':
         rfile=glob(args.read_file)
     else:
@@ -1912,6 +1917,9 @@ def extract():
     for n in vrlist:
         vrdic[n[0]]=n[1:]
     for x in links:
+        if not dbl.check_file(x[0],False):
+            print('\n  Warning! could not find file: '+x[0]+' (skipping file)\n')
+            continue
         reads=[0,0,0,0]
         vrcnt=[]
         aaseq=[]
@@ -4997,7 +5005,7 @@ def select(args):
         aaef=glob('*aae.csv')
         if aaef:
             for n in child:
-                x=[k for k in aaef if all([m in k for m in (n[0],'_aae.csv')])]
+                x=[k for k in aaef if n[0]+'_aae.csv' in k]
                 if len(x)!=1:
                     print('  Warning! Amino acid enrichment file could not be found for '+n[0]+' !\n')
                     continue
