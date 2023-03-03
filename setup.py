@@ -3,7 +3,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 setuptools.setup(
     name="caplib3", # Replace with your own username
-    version="0.6.10",
+    version="0.6.12",
     author="Damien Marsic",
     author_email="damien.marsic@aliyun.com",
     description="NGS data analysis of capsid libraries",

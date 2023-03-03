@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-__version__='0.6.10'
-last_update='2023-02-28'
+__version__='0.6.12'
+last_update='2023-03-03'
 author='Damien Marsic, damien.marsic@aliyun.com'
 
 import argparse,sys,gzip,math,regex
@@ -2240,9 +2240,9 @@ def clean(args):
     if freq==(0,0):
         x='none'
     elif not freq[0]:
-        x=freq[1]+' reads'
+        x=str(freq[1])+' reads'
     else:
-        x=freq[0]+'%'
+        x=str(freq[0])+'%'
     r.write(x+'\n  Minimum aa frequency: '+str(maf)+'\n  Minimum unmatched sequence frequency: '+str(ur)+'\n  Maximum number of mutations: '+str(npp)+'\n  Maximum number of non-parenta segments: '+str(nps)+'\n  Remove parental sequences: '+str(args.remove_parent)+'\n')
 # Open sequence files
     for fname in files:
@@ -3554,17 +3554,7 @@ def findreadfiles(pattern,seqtype,exclude):
             rfiles.remove(n)
     rfiles=dict.fromkeys(rfiles,0)
     for rfile in rfiles:
-        if rfile[-3:]=='.gz':
-            f=gzip.open(rfile,'r')
-        elif rfile[-1]=='q':
-            f=open(rfile,'rb')
-        else:
-            f=open(rfile,'r')
-        if rfile[-3:]=='.gz' or rfile[-1]=='q':
-            nr=dbl.lncount(f)//4
-        else:
-            nr=f.read().count('>')
-        f.close()
+        nr=dbl.readcount(rfile)
         rfiles[rfile]=nr
     print('  Read file(s) (number of reads):')
     for n in rfiles:
